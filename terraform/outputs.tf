@@ -27,3 +27,8 @@ output "aws_region" {
   description = "AWS region where resources are deployed"
   value       = var.aws_region
 }
+
+output "model_bucket_name" {
+  description = "S3 bucket for model weights"
+  value       = aws_s3_bucket.models.id
+}

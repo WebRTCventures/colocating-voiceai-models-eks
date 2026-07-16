@@ -8,43 +8,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.35"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.17"
-    }
   }
 }
 
 provider "aws" {
   region = var.aws_region
-}
-
-provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-  }
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = module.eks.cluster_endpoint
-    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-    }
-  }
 }
 
 locals {
@@ -136,76 +104,15 @@ resource "terraform_data" "eks_prevent_destroy" {
   }
 }
 
-# --- GPU NodePool (Kubernetes Manifest) ---
+# --- S3 Model Bucket ---
 
-resource "kubernetes_manifest" "gpu_nodepool" {
-  manifest = {
-    apiVersion = "karpenter.sh/v1"
-    kind       = "NodePool"
-    metadata = {
-      name = "gpu-voiceai"
-    }
-    spec = {
-      disruption = {
-        budgets = [
-          {
-            nodes = "0"
-          }
-        ]
-        consolidateAfter      = "30m"
-        consolidationPolicy   = "WhenEmpty"
-      }
-      limits = {
-        "nvidia.com/gpu" = "2"
-      }
-      template = {
-        metadata = {
-          labels = {
-            "workload-type" = "gpu-voiceai"
-          }
-        }
-        spec = {
-          nodeClassRef = {
-            group = "eks.amazonaws.com"
-            kind  = "NodeClass"
-            name  = "default"
-          }
-          requirements = [
-            {
-              key      = "karpenter.sh/capacity-type"
-              operator = "In"
-              values   = ["on-demand"]
-            },
-            {
-              key      = "kubernetes.io/arch"
-              operator = "In"
-              values   = ["amd64"]
-            },
-            {
-              key      = "node.kubernetes.io/instance-type"
-              operator = "In"
-              values   = ["g5.2xlarge", "g5.4xlarge"]
-            },
-            {
-              key      = "topology.kubernetes.io/zone"
-              operator = "In"
-              values   = [var.availability_zone]
-            }
-          ]
-          taints = [
-            {
-              key    = "nvidia.com/gpu"
-              value  = "true"
-              effect = "NoSchedule"
-            }
-          ]
-        }
-      }
-    }
-  }
+resource "aws_s3_bucket" "models" {
+  bucket = "${var.cluster_name}-models-${data.aws_caller_identity.current.account_id}"
 
-  depends_on = [module.eks]
+  tags = local.common_tags
 }
+
+data "aws_caller_identity" "current" {}
 
 # --- Security Groups ---
 
@@ -333,8 +240,8 @@ data "aws_iam_policy_document" "model_serving" {
     ]
 
     resources = [
-      var.model_bucket_arn,
-      "${var.model_bucket_arn}/*",
+      aws_s3_bucket.models.arn,
+      "${aws_s3_bucket.models.arn}/*",
     ]
   }
 }
@@ -527,135 +434,3 @@ resource "aws_grafana_workspace" "main" {
 #   3. The Grafana HTTP API directly.
 # The Grafana IAM role already has the required aps:QueryMetrics permissions
 # scoped to the Prometheus workspace ARN.
-
-# --- DCGM Exporter (Kubernetes Manifest) ---
-
-resource "kubernetes_manifest" "monitoring_namespace" {
-  manifest = {
-    apiVersion = "v1"
-    kind       = "Namespace"
-    metadata = {
-      name = "monitoring"
-    }
-  }
-
-  depends_on = [module.eks]
-}
-
-resource "kubernetes_manifest" "dcgm_exporter_service_account" {
-  manifest = {
-    apiVersion = "v1"
-    kind       = "ServiceAccount"
-    metadata = {
-      name      = "dcgm-exporter"
-      namespace = "monitoring"
-    }
-  }
-
-  depends_on = [module.eks, kubernetes_manifest.monitoring_namespace]
-}
-
-resource "kubernetes_manifest" "dcgm_exporter_daemonset" {
-  manifest = {
-    apiVersion = "apps/v1"
-    kind       = "DaemonSet"
-    metadata = {
-      name      = "dcgm-exporter"
-      namespace = "monitoring"
-      labels = {
-        app = "dcgm-exporter"
-      }
-    }
-    spec = {
-      selector = {
-        matchLabels = {
-          app = "dcgm-exporter"
-        }
-      }
-      template = {
-        metadata = {
-          labels = {
-            app = "dcgm-exporter"
-          }
-        }
-        spec = {
-          serviceAccountName = "dcgm-exporter"
-          tolerations = [
-            {
-              key      = "nvidia.com/gpu"
-              operator = "Exists"
-              effect   = "NoSchedule"
-            }
-          ]
-          nodeSelector = {
-            "eks.amazonaws.com/compute-type" = "auto"
-          }
-          containers = [
-            {
-              name  = "dcgm-exporter"
-              image = "nvcr.io/nvidia/k8s/dcgm-exporter:3.3.8-3.6.0-ubuntu22.04"
-              ports = [
-                {
-                  name          = "metrics"
-                  containerPort = 9400
-                  protocol      = "TCP"
-                }
-              ]
-              env = [
-                {
-                  name  = "DCGM_EXPORTER_KUBERNETES"
-                  value = "true"
-                },
-                {
-                  name  = "DCGM_EXPORTER_LISTEN"
-                  value = ":9400"
-                },
-                {
-                  name  = "DCGM_EXPORTER_INTERVAL"
-                  value = "30000"
-                }
-              ]
-              readinessProbe = {
-                httpGet = {
-                  path = "/health"
-                  port = 9400
-                }
-                initialDelaySeconds = 30
-                periodSeconds       = 10
-              }
-              resources = {
-                requests = {
-                  cpu    = "100m"
-                  memory = "128Mi"
-                }
-                limits = {
-                  cpu    = "200m"
-                  memory = "256Mi"
-                }
-              }
-              securityContext = {
-                privileged = true
-              }
-              volumeMounts = [
-                {
-                  name      = "device-run"
-                  mountPath = "/var/lib/kubelet/device-plugins"
-                }
-              ]
-            }
-          ]
-          volumes = [
-            {
-              name = "device-run"
-              hostPath = {
-                path = "/var/lib/kubelet/device-plugins"
-              }
-            }
-          ]
-        }
-      }
-    }
-  }
-
-  depends_on = [module.eks, kubernetes_manifest.monitoring_namespace, kubernetes_manifest.dcgm_exporter_service_account]
-}

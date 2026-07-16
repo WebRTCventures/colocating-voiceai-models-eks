@@ -20,11 +20,6 @@ kubernetes_version = "1.31"
 # CIDR block for the VPC
 vpc_cidr = "10.0.0.0/16"
 
-# REQUIRED - You must change this value!
-# ARN of the S3 bucket containing your model weights.
-# Replace with the ARN of your actual S3 bucket.
-model_bucket_arn = "arn:aws:s3:::your-model-bucket-name"
-
 # IAM Identity Center group IDs for Grafana admin access (optional)
 # Example: ["group-id-1", "group-id-2"]
 grafana_admin_groups = []
