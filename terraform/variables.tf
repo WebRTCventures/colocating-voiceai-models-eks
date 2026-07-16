@@ -53,8 +53,3 @@ variable "vpc_cidr" {
   }
 }
 
-variable "grafana_admin_groups" {
-  description = "IAM Identity Center group IDs for Grafana admin access"
-  type        = list(string)
-  default     = []
-}
