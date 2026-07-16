@@ -103,17 +103,6 @@ module "eks" {
   tags = local.common_tags
 }
 
-# Prevent accidental deletion of the EKS cluster.
-# Terraform modules don't support lifecycle blocks directly, so we use a
-# terraform_data resource that mirrors the cluster's lifecycle.
-resource "terraform_data" "eks_prevent_destroy" {
-  input = module.eks.cluster_name
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
 # --- S3 Model Bucket ---
 
 resource "aws_s3_bucket" "models" {
