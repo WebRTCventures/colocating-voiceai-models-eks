@@ -53,16 +53,6 @@ variable "vpc_cidr" {
   }
 }
 
-variable "model_bucket_arn" {
-  description = "ARN of the S3 bucket containing model weights"
-  type        = string
-
-  validation {
-    condition     = startswith(var.model_bucket_arn, "arn:aws:s3:::")
-    error_message = "Model bucket ARN must be a valid S3 ARN starting with 'arn:aws:s3:::'."
-  }
-}
-
 variable "grafana_admin_groups" {
   description = "IAM Identity Center group IDs for Grafana admin access"
   type        = list(string)
