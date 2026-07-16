@@ -1,0 +1,14 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/tfplan
+terraform/terraform.tfvars
+
+# direnv
+.direnv/
+.env.local
+
+# Nix
+result
