@@ -31,7 +31,7 @@ spec:
           operator: Exists
           effect: NoSchedule
       nodeSelector:
-        eks.amazonaws.com/compute-type: auto
+        workload-type: gpu-voiceai
       containers:
         - name: dcgm-exporter
           image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.8-3.6.0-ubuntu22.04
@@ -55,10 +55,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 200m
               memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             privileged: true
           volumeMounts:
