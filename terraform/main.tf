@@ -16,13 +16,23 @@ provider "aws" {
 }
 
 locals {
-  # Subnet CIDR: /18 derived from the VPC /16 CIDR
-  subnet_cidr = cidrsubnet(var.vpc_cidr, 2, 0)
+  # EKS requires subnets in at least 2 AZs for control plane ENIs.
+  # GPU workloads are pinned to the primary AZ via NodePool topology constraint.
+  azs = slice(data.aws_availability_zones.available.names, 0, 2)
 
   # Common tags applied to all resources
   common_tags = {
     Project   = var.cluster_name
     ManagedBy = "terraform"
+  }
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
+
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required"]
   }
 }
 
@@ -35,10 +45,10 @@ module "vpc" {
   name = "${var.cluster_name}-vpc"
   cidr = var.vpc_cidr
 
-  azs            = [var.availability_zone]
-  public_subnets = [local.subnet_cidr]
+  azs            = local.azs
+  public_subnets = [cidrsubnet(var.vpc_cidr, 2, 0), cidrsubnet(var.vpc_cidr, 2, 1)]
 
-  enable_nat_gateway = false
+  enable_nat_gateway   = false
   enable_dns_hostnames = true
   enable_dns_support   = true
 
@@ -360,77 +370,3 @@ resource "aws_prometheus_workspace" "main" {
   tags = local.common_tags
 }
 
-
-# --- Amazon Managed Grafana ---
-
-# IAM role for the Grafana workspace
-resource "aws_iam_role" "grafana" {
-  name = "${var.cluster_name}-grafana"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "grafana.amazonaws.com"
-        }
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
-
-  tags = local.common_tags
-}
-
-# IAM policy granting Grafana read access to Prometheus metrics
-resource "aws_iam_policy" "grafana_prometheus_read" {
-  name = "${var.cluster_name}-grafana-prometheus-read"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "aps:QueryMetrics",
-          "aps:GetMetricMetadata",
-          "aps:GetSeries",
-          "aps:GetLabels"
-        ]
-        Resource = aws_prometheus_workspace.main.arn
-      }
-    ]
-  })
-
-  tags = local.common_tags
-}
-
-# Attach the Prometheus read policy to the Grafana role
-resource "aws_iam_role_policy_attachment" "grafana_prometheus_read" {
-  role       = aws_iam_role.grafana.name
-  policy_arn = aws_iam_policy.grafana_prometheus_read.arn
-}
-
-# Amazon Managed Grafana workspace
-resource "aws_grafana_workspace" "main" {
-  account_access_type      = "CURRENT_ACCOUNT"
-  authentication_providers = ["AWS_SSO"]
-  permission_type          = "SERVICE_MANAGED"
-  name                     = "${var.cluster_name}-grafana"
-  role_arn                 = aws_iam_role.grafana.arn
-  data_sources             = ["PROMETHEUS"]
-
-  depends_on = [aws_prometheus_workspace.main]
-
-  tags = local.common_tags
-}
-
-# NOTE: The AWS Terraform provider does not include an
-# aws_grafana_workspace_configuration resource for configuring data sources.
-# The Prometheus data source must be added post-apply via:
-#   1. The Grafana console (AWS data source configuration UI), or
-#   2. The grafana/grafana Terraform provider with an API key, or
-#   3. The Grafana HTTP API directly.
-# The Grafana IAM role already has the required aps:QueryMetrics permissions
-# scoped to the Prometheus workspace ARN.

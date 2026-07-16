@@ -8,11 +8,6 @@ output "update_kubeconfig_command" {
   value       = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.aws_region}"
 }
 
-output "grafana_workspace_url" {
-  description = "Amazon Managed Grafana workspace URL"
-  value       = "https://${aws_grafana_workspace.main.endpoint}"
-}
-
 output "prometheus_remote_write_endpoint" {
   description = "Amazon Managed Prometheus remote-write endpoint URL"
   value       = "${aws_prometheus_workspace.main.prometheus_endpoint}api/v1/remote_write"

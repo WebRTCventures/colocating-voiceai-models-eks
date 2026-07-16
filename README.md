@@ -12,7 +12,8 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   └── terraform.tfvars.example
 ├── k8s/                    # Kubernetes manifests (applied post-cluster)
 │   ├── gpu-nodepool.yaml   # Karpenter NodePool for g5 GPU instances
-│   └── dcgm-exporter.yaml  # NVIDIA GPU metrics DaemonSet
+│   ├── dcgm-exporter.yaml  # NVIDIA GPU metrics DaemonSet
+│   └── grafana.yaml        # Self-hosted Grafana for dashboards
 ├── flake.nix               # Nix dev environment
 └── .envrc                  # direnv activation
 ```
@@ -60,7 +61,7 @@ The voice AI pipeline uses Llama 3.1. You'll need a [Hugging Face token](https:/
 |----------|------|
 | g5.2xlarge | ~$1.21/hr |
 | EKS cluster | $0.10/hr |
-| Managed Prometheus + Grafana | ~$0.02/hr |
+| Managed Prometheus | ~$0.01/hr |
 
 A full demo session (1-2 hours) costs under $10. Tear down when done.
 
@@ -113,6 +114,14 @@ Verify:
 ```bash
 kubectl get nodepools           # gpu-voiceai listed
 kubectl get ds -n monitoring    # dcgm-exporter (0 desired until GPU node exists)
+kubectl get pods -n monitoring  # grafana pod running
+```
+
+Access Grafana via port-forward:
+
+```bash
+kubectl port-forward -n monitoring svc/grafana 3000:3000
+# Open http://localhost:3000 (anonymous admin access enabled)
 ```
 
 ### 5. Verify GPU Node Provisioning

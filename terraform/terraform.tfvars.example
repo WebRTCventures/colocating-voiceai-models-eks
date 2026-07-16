@@ -1,8 +1,8 @@
 # =============================================================================
 # Terraform Variables Example
 # =============================================================================
-# Copy this file to terraform.tfvars and update values for your environment.
-# At minimum, you MUST set model_bucket_arn to your actual S3 bucket ARN.
+# Copy this file to terraform.tfvars and adjust values for your environment.
+# All variables have sensible defaults — no changes required for us-east-1.
 # =============================================================================
 
 # Name of the EKS cluster
@@ -11,7 +11,7 @@ cluster_name = "voiceai-eks"
 # AWS region where all resources will be deployed
 aws_region = "us-east-1"
 
-# Single availability zone for all resources (must have g5 GPU instance capacity)
+# Primary availability zone for GPU workloads (must have g5 capacity)
 availability_zone = "us-east-1a"
 
 # EKS Kubernetes version (must be 1.31 or later)
@@ -19,7 +19,3 @@ kubernetes_version = "1.31"
 
 # CIDR block for the VPC
 vpc_cidr = "10.0.0.0/16"
-
-# IAM Identity Center group IDs for Grafana admin access (optional)
-# Example: ["group-id-1", "group-id-2"]
-grafana_admin_groups = []
