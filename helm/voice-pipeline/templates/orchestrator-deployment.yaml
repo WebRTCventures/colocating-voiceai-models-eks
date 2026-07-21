@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-pipeline-orchestrator
+  labels:
+    {{- include "voice-pipeline.labels" . | nindent 4 }}
+    {{- include "voice-pipeline.pipelineLabels" . | nindent 4 }}
+    app.kubernetes.io/component: orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: orchestrator
+  template:
+    metadata:
+      labels:
+        {{- include "voice-pipeline.labels" . | nindent 8 }}
+        {{- include "voice-pipeline.pipelineLabels" . | nindent 8 }}
+        app.kubernetes.io/component: orchestrator
+    spec:
+      containers:
+        - name: orchestrator
+          image: "{{ .Values.orchestrator.image.repository }}:{{ .Values.orchestrator.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.orchestrator.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: voice-pipeline-endpoints
+          resources:
+            requests:
+              cpu: {{ .Values.orchestrator.resources.requests.cpu | quote }}
+              memory: {{ .Values.orchestrator.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.orchestrator.resources.limits.cpu | quote }}
+              memory: {{ .Values.orchestrator.resources.limits.memory }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.orchestrator.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      {{- include "voice-pipeline.cpuPodAffinity" . | nindent 6 }}
+      {{- include "voice-pipeline.gpuToleration" (dict "tolerateGpuTaint" .Values.orchestrator.tolerateGpuTaint "root" .) | nindent 6 }}

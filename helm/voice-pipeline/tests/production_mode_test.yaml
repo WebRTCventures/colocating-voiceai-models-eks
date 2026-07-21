@@ -1,0 +1,80 @@
+suite: Production mode tests
+templates:
+  - templates/speaches-deployment.yaml
+  - templates/configmap.yaml
+  - templates/karpenter-nodepool.yaml
+tests:
+  - it: should NOT render Speaches deployment when speaches.enabled is false
+    template: templates/speaches-deployment.yaml
+    set:
+      speaches.enabled: false
+      stt.enabled: true
+      stt.port: 8000
+      tts.enabled: true
+      tts.port: 8000
+      nodepool.instanceTypes[0]: g5.12xlarge
+      nodepool.gpuLimit: 8
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should route STT_BASE_URL to voice-pipeline-stt in production mode
+    template: templates/configmap.yaml
+    set:
+      speaches.enabled: false
+      stt.enabled: true
+      stt.port: 8000
+      tts.enabled: true
+      tts.port: 8000
+      nodepool.instanceTypes[0]: g5.12xlarge
+      nodepool.gpuLimit: 8
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data.STT_BASE_URL
+          pattern: voice-pipeline-stt
+      - notMatchRegex:
+          path: data.STT_BASE_URL
+          pattern: voice-pipeline-speaches
+
+  - it: should route TTS_BASE_URL to voice-pipeline-tts in production mode
+    template: templates/configmap.yaml
+    set:
+      speaches.enabled: false
+      stt.enabled: true
+      stt.port: 8000
+      tts.enabled: true
+      tts.port: 8000
+      nodepool.instanceTypes[0]: g5.12xlarge
+      nodepool.gpuLimit: 8
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data.TTS_BASE_URL
+          pattern: voice-pipeline-tts
+      - notMatchRegex:
+          path: data.TTS_BASE_URL
+          pattern: voice-pipeline-speaches
+
+  - it: should target g5.12xlarge instance type in NodePool
+    template: templates/karpenter-nodepool.yaml
+    set:
+      speaches.enabled: false
+      stt.enabled: true
+      stt.port: 8000
+      tts.enabled: true
+      tts.port: 8000
+      nodepool.instanceTypes[0]: g5.12xlarge
+      nodepool.gpuLimit: 8
+    asserts:
+      - isKind:
+          of: NodePool
+      - contains:
+          path: spec.template.spec.requirements
+          content:
+            key: "node.kubernetes.io/instance-type"
+            operator: In
+            values:
+              - g5.12xlarge

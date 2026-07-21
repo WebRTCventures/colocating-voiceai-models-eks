@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-pipeline-endpoints
+  labels:
+    {{- include "voice-pipeline.labels" . | nindent 4 }}
+data:
+  {{- if .Values.stt.enabled }}
+  STT_BASE_URL: "http://voice-pipeline-stt.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.stt.port }}"
+  {{- else }}
+  STT_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}"
+  {{- end }}
+  {{- if .Values.tts.enabled }}
+  TTS_BASE_URL: "http://voice-pipeline-tts.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.tts.port }}"
+  {{- else }}
+  TTS_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}"
+  {{- end }}
+  LLM_BASE_URL: "http://voice-pipeline-llm.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.llm.port }}"
+  LLM_MODEL: "{{ .Values.llm.model }}"
+  STT_MODEL: "{{ .Values.speaches.env.WHISPER__MODEL | default .Values.stt.model }}"
+  TTS_MODEL: "{{ .Values.orchestrator.ttsModel | default "speaches-ai/Kokoro-82M-v1.0" }}"

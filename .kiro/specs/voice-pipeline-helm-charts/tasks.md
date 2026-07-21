@@ -6,22 +6,22 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
 
 ## Tasks
 
-- [ ] 1. Set up chart structure and template helpers
-  - [ ] 1.1 Create Helm chart scaffold with Chart.yaml and values.yaml
+- [x] 1. Set up chart structure and template helpers
+  - [x] 1.1 Create Helm chart scaffold with Chart.yaml and values.yaml
     - Create `helm/voice-pipeline/Chart.yaml` with `apiVersion: v2`, `name: voice-pipeline`, `version: 0.1.0`
     - Create `helm/voice-pipeline/values.yaml` with the full default values schema (scheduling, gpu, llm, speaches, orchestrator, stt, tts, nodepool sections)
     - Create `helm/voice-pipeline/templates/` directory
     - _Requirements: 1.1_
 
-  - [ ] 1.2 Create template helpers (`_helpers.tpl`)
+  - [x] 1.2 Create template helpers (`_helpers.tpl`)
     - Define `voice-pipeline.labels` helper for standard Helm labels (`app.kubernetes.io/name`, `app.kubernetes.io/instance`, `helm.sh/chart`)
     - Define `voice-pipeline.pipelineLabels` helper for shared `voice-pipeline/group: pipeline` label
     - Define `voice-pipeline.cpuPodAffinity` helper with conditional rendering: when `scheduling.colocated` is `true`, render `requiredDuringSchedulingIgnoredDuringExecution` with `topologyKey: kubernetes.io/hostname` targeting `app.kubernetes.io/component: llm`; when `false`, render empty
     - Define `voice-pipeline.gpuToleration` helper that conditionally renders `nvidia.com/gpu=true:NoSchedule` toleration based on the component's `tolerateGpuTaint` value
     - _Requirements: 1.1, 5.2, 5.4_
 
-- [ ] 2. Implement LLM Deployment and Service
-  - [ ] 2.1 Create LLM Deployment template
+- [x] 2. Implement LLM Deployment and Service
+  - [x] 2.1 Create LLM Deployment template
     - Create `helm/voice-pipeline/templates/llm-deployment.yaml`
     - Configure container with `public.ecr.aws/deep-learning-containers/vllm:server-cuda` image
     - Set args: `--model`, `--gpu-memory-utilization 0.85`, `--max-model-len 4096`, `--host 0.0.0.0`, `--port 8000`
@@ -34,15 +34,15 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
     - Apply standard labels with `app.kubernetes.io/component: llm` and pipeline group label
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 9.1, 9.5, 9.6_
 
-  - [ ] 2.2 Create Services template
+  - [x] 2.2 Create Services template
     - Create `helm/voice-pipeline/templates/services.yaml`
     - Define ClusterIP service `voice-pipeline-llm` targeting port 8000, selector: `app.kubernetes.io/component: llm`
     - Define ClusterIP service `voice-pipeline-speaches` targeting port 8000, selector: `app.kubernetes.io/component: speaches`
     - Define ClusterIP service `voice-pipeline-orchestrator` targeting port 8080, selector: `app.kubernetes.io/component: orchestrator`
     - _Requirements: 6.1, 6.3_
 
-- [ ] 3. Implement Speaches Deployment
-  - [ ] 3.1 Create Speaches Deployment template
+- [x] 3. Implement Speaches Deployment
+  - [x] 3.1 Create Speaches Deployment template
     - Create `helm/voice-pipeline/templates/speaches-deployment.yaml`
     - Configure container with `ghcr.io/speaches-ai/speaches:0.7.2` image
     - Set environment variables: `WHISPER__MODEL`, `WHISPER__INFERENCE_DEVICE=cpu`, `WHISPER__COMPUTE_TYPE=int8`
@@ -55,8 +55,8 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
     - Wrap deployment in `{{- if .Values.speaches.enabled }}` conditional
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 5.1, 9.2_
 
-- [ ] 4. Implement Orchestrator Deployment and ConfigMap
-  - [ ] 4.1 Create Orchestrator Deployment template
+- [x] 4. Implement Orchestrator Deployment and ConfigMap
+  - [x] 4.1 Create Orchestrator Deployment template
     - Create `helm/voice-pipeline/templates/orchestrator-deployment.yaml`
     - Configure container with `registry.k8s.io/pause:3.9` placeholder image
     - Set resource requests (cpu: 1, memory: 256Mi) and limits (cpu: 2, memory: 512Mi), no GPU resources
@@ -67,15 +67,15 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
     - Apply standard labels with `app.kubernetes.io/component: orchestrator` and pipeline group label
     - _Requirements: 4.1, 4.2, 4.3, 4.5, 4.6, 5.1, 9.3_
 
-  - [ ] 4.2 Create Endpoint ConfigMap template
+  - [x] 4.2 Create Endpoint ConfigMap template
     - Create `helm/voice-pipeline/templates/configmap.yaml`
     - Render STT_BASE_URL, TTS_BASE_URL, LLM_BASE_URL using fully-qualified DNS format (`http://<service>.<namespace>.svc.cluster.local:<port>`)
     - Conditionally route STT/TTS URLs to separate NIM services when `stt.enabled`/`tts.enabled` is true, or to Speaches service when false
     - Include LLM_MODEL, STT_MODEL, TTS_MODEL keys
     - _Requirements: 6.2, 6.4_
 
-- [ ] 5. Implement Karpenter NodePool
-  - [ ] 5.1 Create Karpenter NodePool template
+- [x] 5. Implement Karpenter NodePool
+  - [x] 5.1 Create Karpenter NodePool template
     - Create `helm/voice-pipeline/templates/karpenter-nodepool.yaml`
     - Wrap in `{{- if .Values.nodepool.enabled }}` conditional
     - Render `apiVersion: karpenter.sh/v1`, `kind: NodePool`, matching the existing `k8s/gpu-nodepool.yaml` pattern
@@ -87,20 +87,20 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
     - Set nodeClassRef from values (default: eks.amazonaws.com/NodeClass/default)
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6_
 
-- [ ] 6. Checkpoint - Validate default chart rendering
+- [x] 6. Checkpoint - Validate default chart rendering
   - Ensure `helm template helm/voice-pipeline/` renders without errors
   - Verify 3 Deployments, 3 Services, 1 ConfigMap, 1 NodePool are rendered
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Create values override files and distributed mode support
-  - [ ] 7.1 Create values-distributed.yaml
+- [x] 7. Create values override files and distributed mode support
+  - [x] 7.1 Create values-distributed.yaml
     - Create `helm/voice-pipeline/values-distributed.yaml`
     - Set `scheduling.colocated: false` to disable pod affinity
     - Set `speaches.tolerateGpuTaint: false` and `orchestrator.tolerateGpuTaint: false` to remove GPU taint tolerations from CPU pods
     - Preserve all other configuration unchanged
     - _Requirements: 7.1, 7.2, 7.4_
 
-  - [ ] 7.2 Create values-production.yaml
+  - [x] 7.2 Create values-production.yaml
     - Create `helm/voice-pipeline/values-production.yaml`
     - Target g5.12xlarge with gpuLimit: 8
     - Enable `stt.enabled: true` and `tts.enabled: true` with NVIDIA NIM images
@@ -108,8 +108,8 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
     - Add inline comments explaining production architecture differences
     - _Requirements: 10.1, 10.2, 10.3, 10.4_
 
-- [ ] 8. Helm template rendering tests
-  - [ ] 8.1 Create helm-unittest test suite for default values
+- [x] 8. Helm template rendering tests
+  - [x] 8.1 Create helm-unittest test suite for default values
     - Create `helm/voice-pipeline/tests/` directory with helm-unittest YAML test files
     - Test default rendering produces 3 Deployments, 3 Services, 1 ConfigMap, 1 NodePool
     - Test LLM deployment has GPU resource request and NO podAffinity
@@ -118,13 +118,13 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
     - Test GPU toleration is present on all pods in colocated mode
     - _Requirements: 1.2, 1.5, 5.1, 5.2, 5.4_
 
-  - [ ] 8.2 Create helm-unittest tests for distributed mode
+  - [x] 8.2 Create helm-unittest tests for distributed mode
     - Test rendering with `values-distributed.yaml` produces no podAffinity blocks on any deployment
     - Test GPU tolerations are removed from Speaches and Orchestrator in distributed mode
     - Test all other configuration (images, resources, probes) remains unchanged
     - _Requirements: 7.1, 7.2, 7.4_
 
-  - [ ] 8.3 Create helm-unittest tests for production mode
+  - [x] 8.3 Create helm-unittest tests for production mode
     - Test rendering with `values-production.yaml` disables Speaches deployment
     - Test STT and TTS pods are enabled with NIM images
     - Test ConfigMap routes STT/TTS URLs to separate NIM services
@@ -150,7 +150,7 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
     - For any namespace value, verify all endpoint URLs follow `http://<service-name>.<namespace>.svc.cluster.local:<port>` format
     - **Validates: Requirements 6.2, 6.4**
 
-- [ ] 9. Final checkpoint - Full chart validation
+- [x] 9. Final checkpoint - Full chart validation
   - Run `helm template` for all three values configurations (default, distributed, production)
   - Run helm-unittest test suite
   - Ensure all tests pass, ask the user if questions arise.
@@ -174,9 +174,11 @@ Create a Helm umbrella chart (`helm/voice-pipeline/`) that deploys the complete 
     { "id": 1, "tasks": ["1.2"] },
     { "id": 2, "tasks": ["2.1", "2.2", "4.2", "5.1"] },
     { "id": 3, "tasks": ["3.1", "4.1"] },
-    { "id": 4, "tasks": ["7.1", "7.2"] },
+    { "id": 4, "tasks": ["6", "7.1", "7.2"] },
     { "id": 5, "tasks": ["8.1", "8.2", "8.3"] },
-    { "id": 6, "tasks": ["8.4", "8.5", "8.6", "8.7"] }
+    { "id": 6, "tasks": ["9", "8.4", "8.5", "8.6", "8.7"] }
   ]
 }
 ```
+
+Task 9 (final checkpoint) runs in the same wave as the optional property tests (8.4–8.7), meaning it does NOT depend on them. Both depend only on the required tests in wave 5 completing successfully.

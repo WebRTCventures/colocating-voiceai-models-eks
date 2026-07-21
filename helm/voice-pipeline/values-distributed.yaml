@@ -1,0 +1,13 @@
+# Distributed mode: pods schedule freely across nodes
+# Use: helm install voice-pipeline ./helm/voice-pipeline -f helm/voice-pipeline/values-distributed.yaml
+
+# Disable pod affinity — pods schedule freely across nodes
+scheduling:
+  colocated: false
+
+# Remove GPU toleration from CPU-only pods so they schedule on non-GPU nodes
+speaches:
+  tolerateGpuTaint: false
+
+orchestrator:
+  tolerateGpuTaint: false

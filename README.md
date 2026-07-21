@@ -10,6 +10,20 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   ├── variables.tf
 │   ├── outputs.tf
 │   └── terraform.tfvars.example
+├── helm/voice-pipeline/    # Helm chart for the voice AI pipeline
+│   ├── Chart.yaml
+│   ├── values.yaml                 # Default: colocated mode, g5.2xlarge
+│   ├── values-distributed.yaml     # Override: distributed mode (no affinity)
+│   ├── values-production.yaml      # Override: g5.12xlarge + NVIDIA NIM
+│   ├── templates/
+│   │   ├── _helpers.tpl            # Shared labels, affinity, tolerations
+│   │   ├── llm-deployment.yaml     # vLLM + Llama 3.1 8B AWQ (GPU)
+│   │   ├── speaches-deployment.yaml # Speaches STT+TTS (CPU)
+│   │   ├── orchestrator-deployment.yaml # Pipecat placeholder (CPU)
+│   │   ├── services.yaml           # 3 ClusterIP services
+│   │   ├── configmap.yaml          # Endpoint URLs for service discovery
+│   │   └── karpenter-nodepool.yaml # GPU node provisioning
+│   └── tests/                      # helm-unittest test suites
 ├── k8s/                    # Kubernetes manifests (applied post-cluster)
 │   ├── gpu-nodepool.yaml   # Karpenter NodePool for g5 GPU instances
 │   ├── dcgm-exporter.yaml  # NVIDIA GPU metrics DaemonSet
@@ -135,11 +149,59 @@ kubectl get nodes -l node.kubernetes.io/instance-type=g5.2xlarge -o wide  # chec
 
 Node provisioning takes up to 5 minutes after the first GPU pod is scheduled.
 
+### 6. Deploy Voice Pipeline (Helm)
+
+The voice pipeline chart deploys LLM (vLLM), Speaches (STT+TTS), and an Orchestrator placeholder as colocated pods on a single GPU node.
+
+**Default (colocated mode):**
+
+```bash
+helm install voice-pipeline helm/voice-pipeline/
+```
+
+This provisions a Karpenter NodePool, schedules the LLM pod on a GPU node, and pulls Speaches + Orchestrator onto the same node via pod affinity.
+
+**Distributed mode** (pods on separate nodes, for latency comparison):
+
+```bash
+helm install voice-pipeline helm/voice-pipeline/ \
+  -f helm/voice-pipeline/values-distributed.yaml
+```
+
+**Production mode** (g5.12xlarge + NVIDIA NIM for STT/TTS):
+
+```bash
+helm install voice-pipeline helm/voice-pipeline/ \
+  -f helm/voice-pipeline/values-production.yaml
+```
+
+Verify:
+
+```bash
+kubectl get pods -l voice-pipeline/group=pipeline -o wide
+# All 3 pods on the same node (colocated) or spread across nodes (distributed)
+kubectl get svc | grep voice-pipeline
+# voice-pipeline-llm, voice-pipeline-speaches, voice-pipeline-orchestrator
+```
+
+Wait for readiness (LLM takes ~3-5 min to load the model):
+
+```bash
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=llm --timeout=300s
+```
+
+**Run tests:**
+
+```bash
+helm unittest helm/voice-pipeline/
+```
+
 ---
 
 ## Teardown
 
 ```bash
+helm uninstall voice-pipeline
 kubectl delete -f ../k8s/
 cd terraform
 terraform destroy

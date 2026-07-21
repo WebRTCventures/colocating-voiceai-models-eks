@@ -1,0 +1,217 @@
+suite: distributed mode
+templates:
+  - templates/llm-deployment.yaml
+  - templates/speaches-deployment.yaml
+  - templates/orchestrator-deployment.yaml
+tests:
+  # --- No podAffinity on any deployment ---
+  - it: LLM deployment has no podAffinity in distributed mode
+    template: templates/llm-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+
+  - it: Speaches deployment has no podAffinity in distributed mode
+    template: templates/speaches-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+
+  - it: Orchestrator deployment has no podAffinity in distributed mode
+    template: templates/orchestrator-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+
+  # --- GPU tolerations removed from Speaches and Orchestrator ---
+  - it: Speaches has no GPU tolerations in distributed mode
+    template: templates/speaches-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.tolerations
+
+  - it: Orchestrator has no GPU tolerations in distributed mode
+    template: templates/orchestrator-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.tolerations
+
+  # --- LLM still has GPU toleration (always needs GPU node) ---
+  - it: LLM still has GPU toleration in distributed mode
+    template: templates/llm-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: nvidia.com/gpu
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+
+  # --- Images remain unchanged in distributed mode ---
+  - it: LLM image is unchanged in distributed mode
+    template: templates/llm-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "public.ecr.aws/deep-learning-containers/vllm:server-cuda"
+
+  - it: Speaches image is unchanged in distributed mode
+    template: templates/speaches-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/speaches-ai/speaches:0.7.2"
+
+  - it: Orchestrator image is unchanged in distributed mode
+    template: templates/orchestrator-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "registry.k8s.io/pause:3.9"
+
+  # --- Resources remain unchanged in distributed mode ---
+  - it: LLM resources are unchanged in distributed mode
+    template: templates/llm-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "2"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 8Gi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 20Gi
+
+  - it: Speaches resources are unchanged in distributed mode
+    template: templates/speaches-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "3"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 2Gi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "4"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 4Gi
+
+  - it: Orchestrator resources are unchanged in distributed mode
+    template: templates/orchestrator-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "1"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "2"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 512Mi
+
+  # --- Probes remain unchanged in distributed mode ---
+  - it: LLM probes are unchanged in distributed mode
+    template: templates/llm-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health
+
+  - it: Speaches probes are unchanged in distributed mode
+    template: templates/speaches-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 60
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 120
+
+  - it: Orchestrator probe is unchanged in distributed mode
+    template: templates/orchestrator-deployment.yaml
+    set:
+      scheduling.colocated: false
+      speaches.tolerateGpuTaint: false
+      orchestrator.tolerateGpuTaint: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 5

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: voice-pipeline
+description: Voice AI pipeline - LLM, Speaches STT+TTS, and Orchestrator colocated on EKS GPU nodes
+version: 0.1.0
+type: application

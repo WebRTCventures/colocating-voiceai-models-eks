@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-pipeline-llm
+  labels:
+    {{- include "voice-pipeline.labels" . | nindent 4 }}
+    {{- include "voice-pipeline.pipelineLabels" . | nindent 4 }}
+    app.kubernetes.io/component: llm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: llm
+  template:
+    metadata:
+      labels:
+        {{- include "voice-pipeline.labels" . | nindent 8 }}
+        {{- include "voice-pipeline.pipelineLabels" . | nindent 8 }}
+        app.kubernetes.io/component: llm
+    spec:
+      containers:
+        - name: vllm
+          image: "{{ .Values.llm.image.repository }}:{{ .Values.llm.image.tag }}"
+          args:
+            - "--model"
+            - "{{ .Values.llm.model }}"
+            - "--gpu-memory-utilization"
+            - "{{ .Values.llm.args.gpuMemoryUtilization }}"
+            - "--max-model-len"
+            - "{{ .Values.llm.args.maxModelLen }}"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "{{ .Values.llm.port }}"
+          ports:
+            - containerPort: {{ .Values.llm.port }}
+              protocol: TCP
+          resources:
+            requests:
+              cpu: {{ .Values.llm.resources.requests.cpu | quote }}
+              memory: {{ .Values.llm.resources.requests.memory }}
+              nvidia.com/gpu: {{ index .Values.llm.resources.requests "nvidia.com/gpu" | quote }}
+            limits:
+              memory: {{ .Values.llm.resources.limits.memory }}
+              nvidia.com/gpu: {{ index .Values.llm.resources.limits "nvidia.com/gpu" | quote }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.llm.port }}
+            periodSeconds: {{ .Values.llm.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.llm.startupProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.llm.port }}
+            periodSeconds: {{ .Values.llm.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.llm.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.llm.port }}
+            periodSeconds: {{ .Values.llm.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.llm.livenessProbe.failureThreshold }}
+      tolerations:
+        - key: {{ .Values.gpu.taint.key }}
+          operator: Equal
+          value: {{ .Values.gpu.taint.value | quote }}
+          effect: {{ .Values.gpu.taint.effect }}

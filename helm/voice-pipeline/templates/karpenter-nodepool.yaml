@@ -1,0 +1,43 @@
+{{- if .Values.nodepool.enabled }}
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: gpu-voiceai
+  labels:
+    {{- include "voice-pipeline.labels" . | nindent 4 }}
+spec:
+  disruption:
+    budgets:
+      {{- toYaml .Values.nodepool.disruption.budgets | nindent 6 }}
+    consolidateAfter: {{ .Values.nodepool.disruption.consolidateAfter }}
+    consolidationPolicy: {{ .Values.nodepool.disruption.consolidationPolicy }}
+  limits:
+    nvidia.com/gpu: {{ .Values.nodepool.gpuLimit | quote }}
+  template:
+    metadata:
+      labels:
+        workload-type: gpu-voiceai
+    spec:
+      nodeClassRef:
+        group: {{ .Values.nodepool.nodeClassRef.group }}
+        kind: {{ .Values.nodepool.nodeClassRef.kind }}
+        name: {{ .Values.nodepool.nodeClassRef.name }}
+      requirements:
+        - key: "karpenter.sh/capacity-type"
+          operator: In
+          values: [{{ .Values.nodepool.capacityType | quote }}]
+        - key: "kubernetes.io/arch"
+          operator: In
+          values: ["amd64"]
+        - key: "node.kubernetes.io/instance-type"
+          operator: In
+          values:
+            {{- toYaml .Values.nodepool.instanceTypes | nindent 12 }}
+        - key: "topology.kubernetes.io/zone"
+          operator: In
+          values: [{{ .Values.nodepool.availabilityZone | quote }}]
+      taints:
+        - key: {{ .Values.gpu.taint.key }}
+          value: {{ .Values.gpu.taint.value | quote }}
+          effect: {{ .Values.gpu.taint.effect }}
+{{- end }}
