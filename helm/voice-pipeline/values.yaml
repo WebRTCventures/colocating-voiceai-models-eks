@@ -1,0 +1,115 @@
+# Scheduling
+scheduling:
+  colocated: true
+  nodeSelector: {}
+
+# Shared pipeline label (for identification/monitoring, NOT used as affinity selector)
+pipeline:
+  group: pipeline
+
+# GPU toleration applied to all pods in colocated mode
+gpu:
+  taint:
+    key: nvidia.com/gpu
+    value: "true"
+    effect: NoSchedule
+
+# LLM configuration (scheduling anchor — no affinity rules)
+llm:
+  image:
+    repository: public.ecr.aws/deep-learning-containers/vllm
+    tag: server-cuda
+  model: hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
+  args:
+    gpuMemoryUtilization: "0.85"
+    maxModelLen: "4096"
+  resources:
+    requests:
+      cpu: "2"
+      memory: 8Gi
+      nvidia.com/gpu: "1"
+    limits:
+      memory: 20Gi
+      nvidia.com/gpu: "1"
+  startupProbe:
+    periodSeconds: 10
+    failureThreshold: 30
+  readinessProbe:
+    periodSeconds: 10
+    failureThreshold: 3
+  livenessProbe:
+    periodSeconds: 30
+    failureThreshold: 3
+  port: 8000
+
+# Speaches STT+TTS configuration
+speaches:
+  enabled: true
+  tolerateGpuTaint: true
+  image:
+    repository: ghcr.io/speaches-ai/speaches
+    tag: "0.7.2"
+  env:
+    WHISPER__MODEL: Systran/faster-whisper-large-v3-turbo
+    WHISPER__INFERENCE_DEVICE: cpu
+    WHISPER__COMPUTE_TYPE: int8
+  resources:
+    requests:
+      cpu: "3"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 4Gi
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    failureThreshold: 3
+  livenessProbe:
+    initialDelaySeconds: 120
+    periodSeconds: 30
+    failureThreshold: 5
+  port: 8000
+
+# Orchestrator configuration
+orchestrator:
+  tolerateGpuTaint: true
+  image:
+    repository: registry.k8s.io/pause
+    tag: "3.9"
+  resources:
+    requests:
+      cpu: "1"
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 512Mi
+  port: 8080
+  ttsModel: "speaches-ai/Kokoro-82M-v1.0"
+
+# Production mode: separate STT/TTS pods (disabled by default)
+stt:
+  enabled: false
+  port: 8000
+
+tts:
+  enabled: false
+  port: 8000
+
+# Karpenter NodePool
+nodepool:
+  enabled: true
+  instanceTypes:
+    - g5.2xlarge
+    - g5.4xlarge
+  capacityType: on-demand
+  availabilityZone: us-east-1a
+  gpuLimit: 2
+  nodeClassRef:
+    group: eks.amazonaws.com
+    kind: NodeClass
+    name: default
+  disruption:
+    consolidateAfter: 30m
+    consolidationPolicy: WhenEmpty
+    budgets:
+      - nodes: "0"

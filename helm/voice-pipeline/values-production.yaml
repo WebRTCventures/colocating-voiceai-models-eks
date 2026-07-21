@@ -1,0 +1,48 @@
+# Production mode: g5.12xlarge with 4x A10G GPUs
+# Replaces unified Speaches pod with dedicated NVIDIA NIM containers for STT and TTS
+# Use: helm install voice-pipeline ./helm/voice-pipeline -f helm/voice-pipeline/values-production.yaml
+
+# Target g5.12xlarge (4x A10G GPUs) — larger instance for production workloads
+nodepool:
+  instanceTypes:
+    - g5.12xlarge
+  gpuLimit: 8
+
+# LLM keeps the same image but gets more resources for production traffic
+llm:
+  resources:
+    requests:
+      cpu: "4"
+      memory: 16Gi
+      nvidia.com/gpu: "1"
+    limits:
+      memory: 32Gi
+      nvidia.com/gpu: "1"
+
+# Enable dedicated NVIDIA NIM STT pod (replaces Speaches STT)
+# Nemotron ASR provides GPU-accelerated speech recognition
+stt:
+  enabled: true
+  image:
+    repository: nvcr.io/nim/nvidia/parakeet-ctc-0.6b-asr
+    tag: latest
+  resources:
+    requests:
+      nvidia.com/gpu: "1"
+  port: 8000
+
+# Enable dedicated NVIDIA NIM TTS pod (replaces Speaches TTS)
+# Magpie TTS provides GPU-accelerated speech synthesis
+tts:
+  enabled: true
+  image:
+    repository: nvcr.io/nim/nvidia/magpie-tts-multilingual
+    tag: latest
+  resources:
+    requests:
+      nvidia.com/gpu: "1"
+  port: 8000
+
+# Disable unified Speaches pod — replaced by dedicated NIM STT and TTS pods above
+speaches:
+  enabled: false

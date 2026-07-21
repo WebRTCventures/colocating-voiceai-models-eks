@@ -1,0 +1,56 @@
+{{- if .Values.speaches.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-pipeline-speaches
+  labels:
+    {{- include "voice-pipeline.labels" . | nindent 4 }}
+    {{- include "voice-pipeline.pipelineLabels" . | nindent 4 }}
+    app.kubernetes.io/component: speaches
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: speaches
+  template:
+    metadata:
+      labels:
+        {{- include "voice-pipeline.labels" . | nindent 8 }}
+        {{- include "voice-pipeline.pipelineLabels" . | nindent 8 }}
+        app.kubernetes.io/component: speaches
+    spec:
+      containers:
+        - name: speaches
+          image: "{{ .Values.speaches.image.repository }}:{{ .Values.speaches.image.tag }}"
+          env:
+            {{- range $key, $value := .Values.speaches.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.speaches.port }}
+              protocol: TCP
+          resources:
+            requests:
+              cpu: {{ .Values.speaches.resources.requests.cpu | quote }}
+              memory: {{ .Values.speaches.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.speaches.resources.limits.cpu | quote }}
+              memory: {{ .Values.speaches.resources.limits.memory }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.speaches.port }}
+            initialDelaySeconds: {{ .Values.speaches.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.speaches.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.speaches.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.speaches.port }}
+            initialDelaySeconds: {{ .Values.speaches.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.speaches.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.speaches.livenessProbe.failureThreshold }}
+      {{- include "voice-pipeline.cpuPodAffinity" . | nindent 6 }}
+      {{- include "voice-pipeline.gpuToleration" (dict "tolerateGpuTaint" .Values.speaches.tolerateGpuTaint "root" .) | nindent 6 }}
+{{- end }}

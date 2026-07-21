@@ -1,0 +1,165 @@
+suite: default values tests
+templates:
+  - templates/llm-deployment.yaml
+  - templates/speaches-deployment.yaml
+  - templates/orchestrator-deployment.yaml
+  - templates/services.yaml
+  - templates/configmap.yaml
+  - templates/karpenter-nodepool.yaml
+tests:
+  # --- Resource count: 3 Deployments (1 per template) ---
+  - it: should render LLM Deployment
+    template: templates/llm-deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+
+  - it: should render Speaches Deployment
+    template: templates/speaches-deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+
+  - it: should render Orchestrator Deployment
+    template: templates/orchestrator-deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+
+  # --- Resource count: 3 Services ---
+  - it: should render 3 Services
+    template: templates/services.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+      - isKind:
+          of: Service
+        documentIndex: 0
+      - isKind:
+          of: Service
+        documentIndex: 1
+      - isKind:
+          of: Service
+        documentIndex: 2
+
+  # --- Resource count: 1 ConfigMap ---
+  - it: should render 1 ConfigMap
+    template: templates/configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+
+  # --- Resource count: 1 NodePool ---
+  - it: should render 1 NodePool
+    template: templates/karpenter-nodepool.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NodePool
+
+  # --- LLM deployment: GPU resource request and NO podAffinity ---
+  - it: LLM deployment should have GPU resource request
+    template: templates/llm-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests["nvidia.com/gpu"]
+          value: "1"
+
+  - it: LLM deployment should NOT have podAffinity
+    template: templates/llm-deployment.yaml
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+
+  # --- Speaches deployment has podAffinity targeting llm ---
+  - it: Speaches deployment should have podAffinity targeting llm component
+    template: templates/speaches-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchExpressions[0].key
+          value: app.kubernetes.io/component
+      - equal:
+          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchExpressions[0].values[0]
+          value: llm
+      - equal:
+          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey
+          value: kubernetes.io/hostname
+
+  # --- Orchestrator deployment has podAffinity targeting llm ---
+  - it: Orchestrator deployment should have podAffinity targeting llm component
+    template: templates/orchestrator-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchExpressions[0].key
+          value: app.kubernetes.io/component
+      - equal:
+          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchExpressions[0].values[0]
+          value: llm
+      - equal:
+          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey
+          value: kubernetes.io/hostname
+
+  # --- All pods carry voice-pipeline/group: pipeline label ---
+  - it: LLM pod should carry pipeline group label
+    template: templates/llm-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.voice-pipeline/group
+          value: pipeline
+
+  - it: Speaches pod should carry pipeline group label
+    template: templates/speaches-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.voice-pipeline/group
+          value: pipeline
+
+  - it: Orchestrator pod should carry pipeline group label
+    template: templates/orchestrator-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.voice-pipeline/group
+          value: pipeline
+
+  # --- GPU toleration present on all pods in colocated mode ---
+  - it: LLM pod should have GPU toleration
+    template: templates/llm-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: nvidia.com/gpu
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+
+  - it: Speaches pod should have GPU toleration in colocated mode
+    template: templates/speaches-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: nvidia.com/gpu
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+
+  - it: Orchestrator pod should have GPU toleration in colocated mode
+    template: templates/orchestrator-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: nvidia.com/gpu
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
