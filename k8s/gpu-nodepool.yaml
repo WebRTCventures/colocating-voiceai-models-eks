@@ -1,3 +1,6 @@
+# NOTE: This standalone manifest is superseded by the Helm chart (helm/voice-pipeline/).
+# The chart includes an identical NodePool template managed by Helm lifecycle.
+# This file is kept as a reference for non-Helm deployments.
 apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
