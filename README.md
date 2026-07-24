@@ -24,8 +24,8 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   │   ├── configmap.yaml          # Endpoint URLs for service discovery
 │   │   └── karpenter-nodepool.yaml # GPU node provisioning
 │   └── tests/                      # helm-unittest test suites
-├── k8s/                    # Kubernetes manifests (applied post-cluster)
-│   ├── gpu-nodepool.yaml   # Karpenter NodePool for g5 GPU instances
+├── k8s/                    # Kubernetes manifests — monitoring only
+│   ├── gpu-nodepool.yaml   # (reference only — managed by Helm chart)
 │   ├── dcgm-exporter.yaml  # NVIDIA GPU metrics DaemonSet
 │   └── grafana.yaml        # Self-hosted Grafana for dashboards
 ├── flake.nix               # Nix dev environment
@@ -117,16 +117,16 @@ $(terraform output -raw update_kubeconfig_command)
 kubectl cluster-info
 ```
 
-### 4. Apply Kubernetes Manifests
+### 4. Apply Monitoring Manifests
 
 ```bash
-kubectl apply -f ../k8s/
+kubectl apply -f ../k8s/dcgm-exporter.yaml
+kubectl apply -f ../k8s/grafana.yaml
 ```
 
 Verify:
 
 ```bash
-kubectl get nodepools           # gpu-voiceai listed
 kubectl get ds -n monitoring    # dcgm-exporter (0 desired until GPU node exists)
 kubectl get pods -n monitoring  # grafana pod running
 ```
@@ -138,18 +138,7 @@ kubectl port-forward -n monitoring svc/grafana 3000:3000
 # Open http://localhost:3000 (anonymous admin access enabled)
 ```
 
-### 5. Verify GPU Node Provisioning
-
-GPU nodes spin up on-demand when a pod requests `nvidia.com/gpu`. After deploying a GPU workload:
-
-```bash
-kubectl get nodes -l node.kubernetes.io/instance-type=g5.2xlarge
-kubectl get nodes -l node.kubernetes.io/instance-type=g5.2xlarge -o wide  # check EXTERNAL-IP
-```
-
-Node provisioning takes up to 5 minutes after the first GPU pod is scheduled.
-
-### 6. Deploy Voice Pipeline (Helm)
+### 5. Deploy Voice Pipeline (Helm)
 
 The voice pipeline chart deploys LLM (vLLM), Speaches (STT+TTS), and an Orchestrator placeholder as colocated pods on a single GPU node.
 
