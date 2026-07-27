@@ -18,4 +18,15 @@ data:
   LLM_BASE_URL: "http://voice-pipeline-llm.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.llm.port }}"
   LLM_MODEL: "{{ .Values.llm.model }}"
   STT_MODEL: "{{ .Values.speaches.env.WHISPER__MODEL | default .Values.stt.model }}"
-  TTS_MODEL: "{{ .Values.orchestrator.ttsModel | default "speaches-ai/Kokoro-82M-v1.0" }}"
+  TTS_MODEL: "{{ .Values.orchestrator.ttsModel | default "speaches-ai/Kokoro-82M-v1.0-ONNX" }}"
+  {{- with .Values.orchestrator.livekit }}
+  {{- if .url }}
+  LIVEKIT_URL: "{{ .url }}"
+  {{- end }}
+  {{- if .apiKey }}
+  LIVEKIT_API_KEY: "{{ .apiKey }}"
+  {{- end }}
+  {{- if .apiSecret }}
+  LIVEKIT_API_SECRET: "{{ .apiSecret }}"
+  {{- end }}
+  {{- end }}
