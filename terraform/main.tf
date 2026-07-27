@@ -36,6 +36,52 @@ data "aws_availability_zones" "available" {
   }
 }
 
+# --- EKS Cluster SG Cleanup ---
+# The EKS service creates a "primary cluster security group" that is NOT managed
+# by Terraform. On destroy, this SG can linger and block VPC deletion.
+# This null_resource runs a cleanup script on destroy to remove it.
+resource "null_resource" "eks_cluster_sg_cleanup" {
+  # Re-run if the cluster or VPC changes
+  triggers = {
+    cluster_name = var.cluster_name
+    region       = var.aws_region
+    vpc_id       = module.vpc.vpc_id
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "Cleaning up orphaned EKS cluster security group(s)..."
+
+      # The EKS primary SG can be tagged with either:
+      #   - "aws:eks:cluster-name" = "<cluster>"  (newer EKS versions)
+      #   - "kubernetes.io/cluster/<cluster>" = "owned"  (documented in terraform-aws-eks FAQ)
+      # We check both to handle all EKS versions.
+
+      for FILTER in \
+        "Name=tag:aws:eks:cluster-name,Values=${self.triggers.cluster_name}" \
+        "Name=tag:kubernetes.io/cluster/${self.triggers.cluster_name},Values=owned"; do
+
+        SG_IDS=$(aws ec2 describe-security-groups \
+          --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "$FILTER" \
+          --query "SecurityGroups[].GroupId" --output text \
+          --region ${self.triggers.region} 2>/dev/null)
+
+        for SG_ID in $SG_IDS; do
+          if [ "$SG_ID" != "None" ] && [ -n "$SG_ID" ]; then
+            echo "Deleting orphaned EKS cluster SG: $SG_ID"
+            aws ec2 delete-security-group --group-id "$SG_ID" --region ${self.triggers.region} || true
+          fi
+        done
+      done
+
+      echo "EKS cluster SG cleanup complete."
+    EOT
+  }
+
+  depends_on = [module.eks]
+}
+
 # --- VPC & Networking ---
 
 module "vpc" {
