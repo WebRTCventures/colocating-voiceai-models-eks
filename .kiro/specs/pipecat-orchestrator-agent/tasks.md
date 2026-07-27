@@ -6,14 +6,14 @@ Implement a Python voice agent using Pipecat SDK that orchestrates a VAD → STT
 
 ## Tasks
 
-- [ ] 1. Set up project structure and dependencies
-  - [ ] 1.1 Create `orchestrator/` directory with `requirements.txt` and empty module files
+- [x] 1. Set up project structure and dependencies
+  - [x] 1.1 Create `orchestrator/` directory with `requirements.txt` and empty module files
     - Create `orchestrator/requirements.txt` with pinned dependencies: `pipecat-ai[livekit,silero,openai]>=1.0.0`, `livekit-api>=0.7.0`, `prometheus-client>=0.20.0`, `aiohttp>=3.9.0`
     - Create empty `orchestrator/config.py`, `orchestrator/metrics.py`, `orchestrator/observers.py`, `orchestrator/token.py`, `orchestrator/agent.py`
     - _Requirements: 9.2_
 
-- [ ] 2. Implement configuration loading and validation
-  - [ ] 2.1 Implement `orchestrator/config.py` with `Config` dataclass and `load_config()` function
+- [x] 2. Implement configuration loading and validation
+  - [x] 2.1 Implement `orchestrator/config.py` with `Config` dataclass and `load_config()` function
     - Define frozen dataclass with fields: `livekit_url`, `livekit_api_key`, `livekit_api_secret`, `stt_base_url`, `tts_base_url`, `llm_base_url`, `stt_model`, `tts_model`, `llm_model`, `vad_silence_threshold_ms`, `metrics_port`
     - Implement `load_config()` that reads from `os.environ`, validates required variables (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `STT_BASE_URL`, `TTS_BASE_URL`, `LLM_BASE_URL`), validates ranged integers (`VAD_SILENCE_THRESHOLD_MS` 100–2000 default 200, `METRICS_PORT` 1–65535 default 8080), applies defaults for optional model vars (empty string)
     - On missing required vars or invalid ranges, call `sys.exit(1)` with error message naming each invalid/missing variable
@@ -29,8 +29,8 @@ Implement a Python voice agent using Pipecat SDK that orchestrates a VAD → STT
     - Use Hypothesis to generate integers inside/outside [100, 2000] for `VAD_SILENCE_THRESHOLD_MS` and [1, 65535] for `METRICS_PORT`, verify acceptance or `SystemExit` accordingly
     - **Validates: Requirements 2.2, 8.4, 8.5, 8.7**
 
-- [ ] 3. Implement metrics server and Prometheus instrumentation
-  - [ ] 3.1 Implement `orchestrator/metrics.py` with histograms and aiohttp health/metrics server
+- [x] 3. Implement metrics server and Prometheus instrumentation
+  - [x] 3.1 Implement `orchestrator/metrics.py` with histograms and aiohttp health/metrics server
     - Define `stage_duration` Histogram with labels `["stage", "status"]` and voice latency buckets `(0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 0.8, 1.0, 1.5, 2.0)`
     - Define `e2e_latency` Histogram with same buckets
     - Implement `start_metrics_server(port)` creating aiohttp app with `/metrics` and `/health` routes
@@ -44,8 +44,8 @@ Implement a Python voice agent using Pipecat SDK that orchestrates a VAD → STT
     - Test histogram buckets match specification
     - _Requirements: 7.3, 7.4_
 
-- [ ] 4. Implement pipeline observer for latency measurement
-  - [ ] 4.1 Implement `orchestrator/observers.py` with `MetricsObserver` class
+- [x] 4. Implement pipeline observer for latency measurement
+  - [x] 4.1 Implement `orchestrator/observers.py` with `MetricsObserver` class
     - Implement `MetricsObserver` with `on_push_frame` method that tracks frame transitions between processors
     - Record STT stage duration (AudioRawFrame → TranscriptionFrame transition)
     - Record LLM stage duration (TranscriptionFrame → TextFrame transition)
@@ -59,18 +59,18 @@ Implement a Python voice agent using Pipecat SDK that orchestrates a VAD → STT
     - Use Hypothesis to generate mock frame sequences and verify that every stage execution records an observation with correct `stage` and `status` labels
     - **Validates: Requirements 7.1, 7.5**
 
-- [ ] 5. Checkpoint - Verify config and metrics modules
+- [x] 5. Checkpoint - Verify config and metrics modules
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement LiveKit token generation
-  - [ ] 6.1 Implement `orchestrator/token.py` with `generate_token()` function
+- [x] 6. Implement LiveKit token generation
+  - [x] 6.1 Implement `orchestrator/token.py` with `generate_token()` function
     - Generate LiveKit JWT with identity `"voice-agent"`, name `"Voice Agent"`
     - Grant `room_join=True`, `room="voice-agent-room"`, `can_publish=True`, `can_subscribe=True`
     - Accept config object to read `livekit_api_key` and `livekit_api_secret`
     - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 7. Implement main agent pipeline assembly
-  - [ ] 7.1 Implement `orchestrator/agent.py` with full pipeline wiring
+- [x] 7. Implement main agent pipeline assembly
+  - [x] 7.1 Implement `orchestrator/agent.py` with full pipeline wiring
     - Import and call `load_config()` at startup
     - Start metrics server via `start_metrics_server(config.metrics_port)`
     - Configure `LiveKitTransport` with token from `generate_token(config)`, `audio_in_enabled=True`, `audio_out_enabled=True`
@@ -106,11 +106,11 @@ Implement a Python voice agent using Pipecat SDK that orchestrates a VAD → STT
     - Use Hypothesis to generate sequences of conversation turns, verify context never exceeds 20 messages and oldest pairs are dropped first while system prompt is preserved
     - **Validates: Requirements 4.4**
 
-- [ ] 8. Checkpoint - Verify agent module and property tests
+- [x] 8. Checkpoint - Verify agent module and property tests
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Create Dockerfile and container configuration
-  - [ ] 9.1 Create `orchestrator/Dockerfile`
+- [x] 9. Create Dockerfile and container configuration
+  - [x] 9.1 Create `orchestrator/Dockerfile`
     - Use `python:3.11-slim` base image
     - Create non-root user (`agent`) with `groupadd`/`useradd`
     - Copy `requirements.txt` and install dependencies with `pip install --no-cache-dir`
@@ -119,7 +119,7 @@ Implement a Python voice agent using Pipecat SDK that orchestrates a VAD → STT
     - Set `STOPSIGNAL SIGTERM` and `ENTRYPOINT ["python", "agent.py"]`
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
 
-- [ ] 10. Final checkpoint - Ensure all tests pass
+- [x] 10. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
@@ -139,11 +139,12 @@ Implement a Python voice agent using Pipecat SDK that orchestrates a VAD → STT
   "waves": [
     { "id": 0, "tasks": ["1.1"] },
     { "id": 1, "tasks": ["2.1", "3.1"] },
-    { "id": 2, "tasks": ["2.2", "2.3", "3.2", "4.1"] },
-    { "id": 3, "tasks": ["4.2", "6.1"] },
-    { "id": 4, "tasks": ["7.1"] },
-    { "id": 5, "tasks": ["7.2", "7.3", "7.4", "7.5"] },
-    { "id": 6, "tasks": ["9.1"] }
+    { "id": 2, "tasks": ["4.1", "6.1"] },
+    { "id": 3, "tasks": ["7.1"] },
+    { "id": 4, "tasks": ["9.1"] },
+    { "id": 5, "tasks": ["2.2", "2.3", "3.2", "4.2", "7.2", "7.3", "7.4", "7.5"] }
   ]
 }
 ```
+
+**Note:** Wave 5 contains all optional (`*`) property-based and unit test tasks. These are independent leaf tasks that can be executed in any order after wave 4, or skipped entirely without blocking the core implementation path (waves 0–4).
