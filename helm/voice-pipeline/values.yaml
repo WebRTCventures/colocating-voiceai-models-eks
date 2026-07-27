@@ -50,9 +50,10 @@ speaches:
     repository: ghcr.io/speaches-ai/speaches
     tag: "0.9.0-rc.3-cpu"
   env:
-    WHISPER__MODEL: Systran/faster-whisper-large-v3-turbo
+    WHISPER__MODEL: deepdml/faster-whisper-large-v3-turbo-ct2
     WHISPER__INFERENCE_DEVICE: cpu
     WHISPER__COMPUTE_TYPE: int8
+    # HF_TOKEN: ""  # Set via --set speaches.env.HF_TOKEN=hf_xxx (required for model download)
   resources:
     requests:
       cpu: "3"
@@ -74,8 +75,8 @@ speaches:
 orchestrator:
   tolerateGpuTaint: true
   image:
-    repository: registry.k8s.io/pause
-    tag: "3.9"
+    repository: ""  # Set to your ECR URL: <account>.dkr.ecr.<region>.amazonaws.com/voiceai-eks/orchestrator
+    tag: "latest"
   resources:
     requests:
       cpu: "1"
@@ -84,7 +85,12 @@ orchestrator:
       cpu: "2"
       memory: 512Mi
   port: 8080
-  ttsModel: "speaches-ai/Kokoro-82M-v1.0"
+  ttsModel: "speaches-ai/Kokoro-82M-v1.0-ONNX"
+  # LiveKit connection (required for the orchestrator to start)
+  livekit:
+    url: ""        # e.g., wss://livekit.example.com
+    apiKey: ""     # LiveKit API key
+    apiSecret: ""  # LiveKit API secret
 
 # Production mode: separate STT/TTS pods (disabled by default)
 stt:

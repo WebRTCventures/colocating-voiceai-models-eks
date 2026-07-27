@@ -104,7 +104,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "registry.k8s.io/pause:3.9"
+          value: ":latest"
 
   # --- Resources remain unchanged in distributed mode ---
   - it: LLM resources are unchanged in distributed mode
@@ -210,7 +210,10 @@ tests:
       orchestrator.tolerateGpuTaint: false
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
           value: 8080
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
