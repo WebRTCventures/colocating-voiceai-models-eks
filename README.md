@@ -19,11 +19,20 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   │   ├── _helpers.tpl            # Shared labels, affinity, tolerations
 │   │   ├── llm-deployment.yaml     # vLLM + Llama 3.1 8B AWQ (GPU)
 │   │   ├── speaches-deployment.yaml # Speaches STT+TTS (CPU)
-│   │   ├── orchestrator-deployment.yaml # Pipecat placeholder (CPU)
+│   │   ├── orchestrator-deployment.yaml # Pipecat orchestrator (CPU)
 │   │   ├── services.yaml           # 3 ClusterIP services
 │   │   ├── configmap.yaml          # Endpoint URLs for service discovery
 │   │   └── karpenter-nodepool.yaml # GPU node provisioning
 │   └── tests/                      # helm-unittest test suites
+├── orchestrator/           # Pipecat voice agent (VAD → STT → LLM → TTS)
+│   ├── agent.py            # Main entry point — pipeline assembly + lifecycle
+│   ├── config.py           # Environment variable loading and validation
+│   ├── metrics.py          # Prometheus histograms + /health + /metrics server
+│   ├── observers.py        # Pipeline observer for per-stage latency recording
+│   ├── livekit_token.py    # LiveKit JWT token generation
+│   ├── requirements.txt    # Python dependencies (pipecat-ai, livekit, prometheus)
+│   ├── Dockerfile          # Container image (python:3.11-slim, non-root)
+│   └── test_config.py      # Unit tests for config validation
 ├── k8s/                    # Kubernetes manifests — monitoring only
 │   ├── gpu-nodepool.yaml   # (reference only — managed by Helm chart)
 │   ├── dcgm-exporter.yaml  # NVIDIA GPU metrics DaemonSet
@@ -138,30 +147,88 @@ kubectl port-forward -n monitoring svc/grafana 3000:3000
 # Open http://localhost:3000 (anonymous admin access enabled)
 ```
 
-### 5. Deploy Voice Pipeline (Helm)
+### 5. Build the Orchestrator Image
 
-The voice pipeline chart deploys LLM (vLLM), Speaches (STT+TTS), and an Orchestrator placeholder as colocated pods on a single GPU node.
+The orchestrator is a Pipecat voice agent that wires VAD → STT → LLM → TTS over LiveKit WebRTC. Build and push the container image to the ECR repository provisioned by Terraform:
+
+```bash
+cd orchestrator
+
+# Get the ECR repository URL from Terraform
+ECR_REPO=$(cd ../terraform && terraform output -raw orchestrator_ecr_repository_url)
+
+# Authenticate Docker with ECR
+aws ecr get-login-password --region $(cd ../terraform && terraform output -raw aws_region) \
+  | docker login --username AWS --password-stdin $(echo $ECR_REPO | cut -d/ -f1)
+
+# Build and push
+docker build -t $ECR_REPO:latest .
+docker push $ECR_REPO:latest
+
+cd ..
+```
+
+The orchestrator reads all configuration from environment variables (injected via the Helm chart's ConfigMap):
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LIVEKIT_URL` | Yes | LiveKit server WebSocket URL |
+| `LIVEKIT_API_KEY` | Yes | LiveKit API key |
+| `LIVEKIT_API_SECRET` | Yes | LiveKit API secret |
+| `STT_BASE_URL` | Yes | Speaches STT endpoint |
+| `TTS_BASE_URL` | Yes | Speaches TTS endpoint |
+| `LLM_BASE_URL` | Yes | vLLM endpoint |
+| `STT_MODEL` | No | STT model name (default: service default) |
+| `TTS_MODEL` | No | TTS model name (default: service default) |
+| `LLM_MODEL` | No | LLM model name (default: service default) |
+| `VAD_SILENCE_THRESHOLD_MS` | No | Silence threshold in ms (default: 200, range: 100–2000) |
+| `METRICS_PORT` | No | Prometheus metrics port (default: 8080) |
+
+The container exposes `/health` (readiness probe) and `/metrics` (Prometheus scraping) on the metrics port.
+
+### 6. Deploy Voice Pipeline (Helm)
+
+The voice pipeline chart deploys LLM (vLLM), Speaches (STT+TTS), and the Pipecat Orchestrator as colocated pods on a single GPU node.
 
 **Default (colocated mode):**
 
 ```bash
-helm install voice-pipeline helm/voice-pipeline/
+ECR_REPO=$(cd terraform && terraform output -raw orchestrator_ecr_repository_url)
+
+helm install voice-pipeline helm/voice-pipeline/ \
+  --set orchestrator.image.repository=$ECR_REPO \
+  --set orchestrator.livekit.url=wss://YOUR_LIVEKIT_URL \
+  --set orchestrator.livekit.apiKey=YOUR_API_KEY \
+  --set orchestrator.livekit.apiSecret=YOUR_API_SECRET \
+  --set speaches.env.HF_TOKEN=hf_YOUR_HUGGINGFACE_TOKEN
 ```
 
 This provisions a Karpenter NodePool, schedules the LLM pod on a GPU node, and pulls Speaches + Orchestrator onto the same node via pod affinity.
+
+> **Note:** The orchestrator requires LiveKit credentials to start. If you haven't deployed LiveKit yet, you can omit the `livekit.*` flags — the orchestrator pod will crash-loop until they're provided via `helm upgrade`.
 
 **Distributed mode** (pods on separate nodes, for latency comparison):
 
 ```bash
 helm install voice-pipeline helm/voice-pipeline/ \
-  -f helm/voice-pipeline/values-distributed.yaml
+  -f helm/voice-pipeline/values-distributed.yaml \
+  --set orchestrator.image.repository=$ECR_REPO \
+  --set orchestrator.livekit.url=wss://YOUR_LIVEKIT_URL \
+  --set orchestrator.livekit.apiKey=YOUR_API_KEY \
+  --set orchestrator.livekit.apiSecret=YOUR_API_SECRET \
+  --set speaches.env.HF_TOKEN=hf_YOUR_HUGGINGFACE_TOKEN
 ```
 
 **Production mode** (g5.12xlarge + NVIDIA NIM for STT/TTS):
 
 ```bash
 helm install voice-pipeline helm/voice-pipeline/ \
-  -f helm/voice-pipeline/values-production.yaml
+  -f helm/voice-pipeline/values-production.yaml \
+  --set orchestrator.image.repository=$ECR_REPO \
+  --set orchestrator.livekit.url=wss://YOUR_LIVEKIT_URL \
+  --set orchestrator.livekit.apiKey=YOUR_API_KEY \
+  --set orchestrator.livekit.apiSecret=YOUR_API_SECRET \
+  --set speaches.env.HF_TOKEN=hf_YOUR_HUGGINGFACE_TOKEN
 ```
 
 Verify:
@@ -179,11 +246,113 @@ Wait for readiness (LLM takes ~3-5 min to load the model):
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=llm --timeout=300s
 ```
 
-**Run tests:**
+**Run Helm tests:**
 
 ```bash
 helm unittest helm/voice-pipeline/
 ```
+
+**Run orchestrator unit tests:**
+
+```bash
+cd orchestrator
+pip install -r requirements.txt pytest
+pytest test_config.py -v
+cd ..
+```
+
+### 7. Verify Pipeline Services
+
+Once all pods are ready, verify each service is responding correctly using port-forwards.
+
+**Check all pods are colocated:**
+
+```bash
+kubectl get pods -l voice-pipeline/group=pipeline -o wide
+# Confirm all 3 pods show the same NODE
+```
+
+**Orchestrator health and metrics:**
+
+```bash
+kubectl port-forward svc/voice-pipeline-orchestrator 8080:8080 &
+PF_PID=$!
+
+# Health check
+curl -s http://localhost:8080/health
+# Expected: {"status": "ok"}
+
+# Prometheus metrics
+curl -s http://localhost:8080/metrics | grep voice_pipeline
+# Expected: voice_pipeline_stage_duration_seconds and voice_pipeline_e2e_latency_seconds histograms
+
+kill $PF_PID
+```
+
+**LLM (vLLM) — streaming chat completion:**
+
+```bash
+kubectl port-forward svc/voice-pipeline-llm 8000:8000 &
+PF_PID=$!
+
+curl -s http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4",
+    "messages": [{"role": "user", "content": "Say hello in one sentence."}],
+    "max_tokens": 50,
+    "stream": false
+  }'
+# Expected: JSON response with a completion in choices[0].message.content
+
+kill $PF_PID
+```
+
+**Speaches STT — transcription test:**
+
+```bash
+kubectl port-forward svc/voice-pipeline-speaches 8001:8000 &
+PF_PID=$!
+
+# Models are pre-downloaded by the init container — no manual download needed
+
+# Generate a short test WAV (1 second of silence — validates the endpoint accepts audio)
+python3 -c "
+import wave, struct
+with wave.open('/tmp/test.wav', 'w') as f:
+    f.setnchannels(1)
+    f.setsampwidth(2)
+    f.setframerate(16000)
+    f.writeframes(struct.pack('<' + 'h' * 16000, *([0] * 16000)))
+"
+
+curl -s http://localhost:8001/v1/audio/transcriptions \
+  -F "file=@/tmp/test.wav" \
+  -F "model=deepdml/faster-whisper-large-v3-turbo-ct2"
+# Expected: JSON with "text" field (may hallucinate on silence — that's normal)
+
+kill $PF_PID
+```
+
+**Speaches TTS — speech synthesis test:**
+
+```bash
+kubectl port-forward svc/voice-pipeline-speaches 8001:8000 &
+PF_PID=$!
+
+curl -s http://localhost:8001/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"model": "speaches-ai/Kokoro-82M-v1.0-ONNX", "input": "Hello world", "voice": "af_heart"}' \
+  --output /tmp/test_output.wav
+
+# Check we got audio data back (file should be > 1KB)
+ls -la /tmp/test_output.wav
+# Expected: file size > 1000 bytes
+
+kill $PF_PID
+```
+
+If all checks pass, the pipeline is healthy and ready for the browser client and LiveKit integration.
 
 ---
 
