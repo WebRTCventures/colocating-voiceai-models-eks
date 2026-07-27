@@ -27,3 +27,8 @@ output "model_bucket_name" {
   description = "S3 bucket for model weights"
   value       = aws_s3_bucket.models.id
 }
+
+output "orchestrator_ecr_repository_url" {
+  description = "ECR repository URL for the orchestrator container image"
+  value       = aws_ecr_repository.orchestrator.repository_url
+}
