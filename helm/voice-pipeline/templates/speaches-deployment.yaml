@@ -19,6 +19,29 @@ spec:
         {{- include "voice-pipeline.pipelineLabels" . | nindent 8 }}
         app.kubernetes.io/component: speaches
     spec:
+      initContainers:
+        - name: download-models
+          image: "{{ .Values.speaches.image.repository }}:{{ .Values.speaches.image.tag }}"
+          command: ["python3", "-c"]
+          args:
+            - |
+              from huggingface_hub import snapshot_download
+              print("Downloading STT model...")
+              snapshot_download("{{ .Values.speaches.env.WHISPER__MODEL }}")
+              print("STT model ready.")
+              {{- if .Values.orchestrator.ttsModel }}
+              print("Downloading TTS model...")
+              snapshot_download("{{ .Values.orchestrator.ttsModel }}")
+              print("TTS model ready.")
+              {{- end }}
+          env:
+            {{- range $key, $value := .Values.speaches.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /home/ubuntu/.cache/huggingface/hub
       containers:
         - name: speaches
           image: "{{ .Values.speaches.image.repository }}:{{ .Values.speaches.image.tag }}"
@@ -37,6 +60,9 @@ spec:
             limits:
               cpu: {{ .Values.speaches.resources.limits.cpu | quote }}
               memory: {{ .Values.speaches.resources.limits.memory }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /home/ubuntu/.cache/huggingface/hub
           readinessProbe:
             httpGet:
               path: /health
@@ -51,6 +77,9 @@ spec:
             initialDelaySeconds: {{ .Values.speaches.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.speaches.livenessProbe.periodSeconds }}
             failureThreshold: {{ .Values.speaches.livenessProbe.failureThreshold }}
+      volumes:
+        - name: hf-cache
+          emptyDir: {}
       {{- include "voice-pipeline.cpuPodAffinity" . | nindent 6 }}
       {{- include "voice-pipeline.gpuToleration" (dict "tolerateGpuTaint" .Values.speaches.tolerateGpuTaint "root" .) | nindent 6 }}
 {{- end }}
