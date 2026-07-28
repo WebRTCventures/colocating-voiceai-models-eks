@@ -1,0 +1,147 @@
+# =============================================================================
+# LiveKit Server - Helm Values Override
+# =============================================================================
+# Custom values for the official LiveKit Helm chart.
+# Chart source: https://github.com/livekit/livekit-helm
+# Helm repo:    https://helm.livekit.io
+#
+# Install:
+#   helm repo add livekit https://helm.livekit.io
+#   helm install livekit livekit/livekit-server -f helm/livekit/values.yaml
+# =============================================================================
+
+# Single-node demo deployment
+replicaCount: 1
+
+# =============================================================================
+# LiveKit Server Configuration
+# =============================================================================
+# This section is rendered into a ConfigMap as config.yaml by the chart.
+livekit:
+  port: 7880  # WebSocket signaling port (TCP)
+
+  rtc:
+    port_range_start: 50000  # WebRTC media UDP range start
+    port_range_end: 60000    # WebRTC media UDP range end
+    use_external_ip: true    # Advertise node public IP to WebRTC clients
+
+  turn:
+    enabled: false  # No TURN server needed for demo (direct UDP connectivity)
+
+  # ---------------------------------------------------------------------------
+  # API Credentials
+  # ---------------------------------------------------------------------------
+  # ⚠️  IMPORTANT: Replace placeholder credentials before deployment!
+  #
+  # Generate secure credentials using one of:
+  #   openssl rand -base64 32
+  #   lk create-key
+  #
+  # The generated secret must be at least 32 bytes (44 base64 characters)
+  # for production use.
+  #
+  # ⚠️  These same credentials must be passed to:
+  #   1. The voice-pipeline orchestrator pod:
+  #        helm install voice-pipeline ./helm/voice-pipeline \
+  #          --set orchestrator.livekit.apiKey="<YOUR_API_KEY>" \
+  #          --set orchestrator.livekit.apiSecret="<YOUR_API_SECRET>"
+  #
+  #   2. The browser client (environment variables for npm run dev):
+  #        LIVEKIT_API_KEY="<YOUR_API_KEY>"
+  #        LIVEKIT_API_SECRET="<YOUR_API_SECRET>"
+  #
+  # All three components (LiveKit server, orchestrator, browser client) must
+  # share the exact same key/secret pair for token authentication to work.
+  # ---------------------------------------------------------------------------
+  keys:
+    CHANGE-ME-api-key: CHANGE-ME-secret-must-be-at-least-32-chars-long!!
+
+# =============================================================================
+# Host Network Configuration
+# =============================================================================
+# hostNetwork: true binds LiveKit ports (TCP 7880, UDP 50000-60000) directly on
+# the node's network interface. The chart automatically sets
+# dnsPolicy: ClusterFirstWithHostNet when podHostNetwork is enabled, so
+# Kubernetes DNS resolution continues to work.
+#
+# ⚠️  LIMITATION: hostNetwork restricts deployment to ONE LiveKit pod per node
+# (port conflicts prevent multiple pods). This is acceptable for the single-node
+# demo. For production multi-replica deployments, consider STUNner
+# (https://github.com/l7mp/stunner) as a Kubernetes-native TURN/media gateway
+# that avoids hostNetwork entirely.
+# =============================================================================
+podHostNetwork: true
+
+# =============================================================================
+# Load Balancer / Service Configuration
+# =============================================================================
+# Disable Service and Ingress creation — the demo uses direct node IP access
+# via hostNetwork. No ALB, domain, or TLS certificate is needed.
+loadBalancer:
+  type: disable
+
+# =============================================================================
+# Security Group Requirements (Terraform)
+# =============================================================================
+# ⚠️  The following inbound security group rules MUST exist in terraform/main.tf
+# for browser clients to reach LiveKit Server on the node's public IP:
+#
+#   - TCP 7880 from 0.0.0.0/0 and ::/0 (WebSocket signaling)
+#   - UDP 50000-60000 from 0.0.0.0/0 and ::/0 (WebRTC media)
+#
+# The UDP rules already exist. The TCP 7880 rule is added by the
+# aws_vpc_security_group_ingress_rule.livekit_signaling_ipv4 and
+# aws_vpc_security_group_ingress_rule.livekit_signaling_ipv6 resources.
+# =============================================================================
+
+# =============================================================================
+# Pod Scheduling: Tolerations, Affinity, and Resources
+# =============================================================================
+# Resource budget on g5.2xlarge (8 vCPUs, 32 GiB RAM):
+#   - Pipeline pods consume ~6.5 vCPUs (including LiveKit) and ~10.5 GiB requests
+#   - Remaining headroom is shared with kubelet overhead and daemonsets
+#   - LiveKit requests 500m CPU + 256Mi memory — well within the remaining capacity
+# =============================================================================
+
+# Allow scheduling on GPU nodes tainted by Karpenter NodePool
+tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Prefer co-location with the LLM pod for minimal intra-node audio latency
+affinity:
+  podAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - llm
+          topologyKey: kubernetes.io/hostname
+
+# Resource requests sized to fit within g5.2xlarge headroom after pipeline pods
+resources:
+  requests:
+    cpu: 500m
+    memory: 256Mi
+
+# 5-hour graceful shutdown — allows active WebRTC sessions to complete
+terminationGracePeriodSeconds: 18000
+
+# =============================================================================
+# Room Configuration (Documentation Only)
+# =============================================================================
+# The default room name used by both the orchestrator agent and browser client
+# is "voice-agent-room". This name is hardcoded in:
+#   - orchestrator/livekit_token.py (room grant in the generated JWT token)
+#   - browser client's token endpoint (room grant for client-side tokens)
+#
+# No explicit room configuration is needed in this values file. LiveKit creates
+# rooms dynamically when the first participant with a valid token connects.
+# The room is automatically destroyed when all participants disconnect.
+# =============================================================================
