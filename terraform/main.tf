@@ -195,6 +195,28 @@ resource "aws_vpc_security_group_ingress_rule" "webrtc_media_ipv6" {
   tags = local.common_tags
 }
 
+# Ingress: TCP 7880 from 0.0.0.0/0 (LiveKit WebSocket signaling IPv4)
+resource "aws_vpc_security_group_ingress_rule" "livekit_signaling_ipv4" {
+  security_group_id = aws_security_group.node.id
+  description       = "LiveKit WebSocket signaling (IPv4)"
+  ip_protocol       = "tcp"
+  from_port         = 7880
+  to_port           = 7880
+  cidr_ipv4         = "0.0.0.0/0"
+  tags              = local.common_tags
+}
+
+# Ingress: TCP 7880 from ::/0 (LiveKit WebSocket signaling IPv6)
+resource "aws_vpc_security_group_ingress_rule" "livekit_signaling_ipv6" {
+  security_group_id = aws_security_group.node.id
+  description       = "LiveKit WebSocket signaling (IPv6)"
+  ip_protocol       = "tcp"
+  from_port         = 7880
+  to_port           = 7880
+  cidr_ipv6         = "::/0"
+  tags              = local.common_tags
+}
+
 # Ingress: TCP 443 from 0.0.0.0/0 (HTTPS signaling IPv4)
 resource "aws_vpc_security_group_ingress_rule" "https_signaling_ipv4" {
   security_group_id = aws_security_group.node.id
