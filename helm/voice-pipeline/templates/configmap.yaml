@@ -6,16 +6,16 @@ metadata:
     {{- include "voice-pipeline.labels" . | nindent 4 }}
 data:
   {{- if .Values.stt.enabled }}
-  STT_BASE_URL: "http://voice-pipeline-stt.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.stt.port }}"
+  STT_BASE_URL: "http://voice-pipeline-stt.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.stt.port }}/v1"
   {{- else }}
-  STT_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}"
+  STT_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}/v1"
   {{- end }}
   {{- if .Values.tts.enabled }}
-  TTS_BASE_URL: "http://voice-pipeline-tts.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.tts.port }}"
+  TTS_BASE_URL: "http://voice-pipeline-tts.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.tts.port }}/v1"
   {{- else }}
-  TTS_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}"
+  TTS_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}/v1"
   {{- end }}
-  LLM_BASE_URL: "http://voice-pipeline-llm.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.llm.port }}"
+  LLM_BASE_URL: "http://voice-pipeline-llm.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.llm.port }}/v1"
   LLM_MODEL: "{{ .Values.llm.model }}"
   STT_MODEL: "{{ .Values.speaches.env.WHISPER__MODEL | default .Values.stt.model }}"
   TTS_MODEL: "{{ .Values.orchestrator.ttsModel | default "speaches-ai/Kokoro-82M-v1.0-ONNX" }}"
