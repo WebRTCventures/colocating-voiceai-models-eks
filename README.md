@@ -10,6 +10,8 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   ├── variables.tf
 │   ├── outputs.tf
 │   └── terraform.tfvars.example
+├── helm/livekit/           # LiveKit Server values (official chart override)
+│   └── values.yaml                 # hostNetwork, credentials, colocation
 ├── helm/voice-pipeline/    # Helm chart for the voice AI pipeline
 │   ├── Chart.yaml
 │   ├── values.yaml                 # Default: colocated mode, g5.2xlarge
@@ -197,7 +199,7 @@ ECR_REPO=$(cd terraform && terraform output -raw orchestrator_ecr_repository_url
 
 helm install voice-pipeline helm/voice-pipeline/ \
   --set orchestrator.image.repository=$ECR_REPO \
-  --set orchestrator.livekit.url=wss://YOUR_LIVEKIT_URL \
+  --set orchestrator.livekit.url=ws://YOUR_LIVEKIT_URL:7880 \
   --set orchestrator.livekit.apiKey=YOUR_API_KEY \
   --set orchestrator.livekit.apiSecret=YOUR_API_SECRET \
   --set speaches.env.HF_TOKEN=hf_YOUR_HUGGINGFACE_TOKEN
@@ -205,7 +207,7 @@ helm install voice-pipeline helm/voice-pipeline/ \
 
 This provisions a Karpenter NodePool, schedules the LLM pod on a GPU node, and pulls Speaches + Orchestrator onto the same node via pod affinity.
 
-> **Note:** The orchestrator requires LiveKit credentials to start. If you haven't deployed LiveKit yet, you can omit the `livekit.*` flags — the orchestrator pod will crash-loop until they're provided via `helm upgrade`.
+> **Note:** The orchestrator requires LiveKit credentials to start. Deploy LiveKit first (step 7) or omit the `livekit.*` flags — the orchestrator pod will crash-loop until they're provided via `helm upgrade`.
 
 **Distributed mode** (pods on separate nodes, for latency comparison):
 
@@ -213,7 +215,7 @@ This provisions a Karpenter NodePool, schedules the LLM pod on a GPU node, and p
 helm install voice-pipeline helm/voice-pipeline/ \
   -f helm/voice-pipeline/values-distributed.yaml \
   --set orchestrator.image.repository=$ECR_REPO \
-  --set orchestrator.livekit.url=wss://YOUR_LIVEKIT_URL \
+  --set orchestrator.livekit.url=ws://YOUR_LIVEKIT_URL:7880 \
   --set orchestrator.livekit.apiKey=YOUR_API_KEY \
   --set orchestrator.livekit.apiSecret=YOUR_API_SECRET \
   --set speaches.env.HF_TOKEN=hf_YOUR_HUGGINGFACE_TOKEN
@@ -225,7 +227,7 @@ helm install voice-pipeline helm/voice-pipeline/ \
 helm install voice-pipeline helm/voice-pipeline/ \
   -f helm/voice-pipeline/values-production.yaml \
   --set orchestrator.image.repository=$ECR_REPO \
-  --set orchestrator.livekit.url=wss://YOUR_LIVEKIT_URL \
+  --set orchestrator.livekit.url=ws://YOUR_LIVEKIT_URL:7880 \
   --set orchestrator.livekit.apiKey=YOUR_API_KEY \
   --set orchestrator.livekit.apiSecret=YOUR_API_SECRET \
   --set speaches.env.HF_TOKEN=hf_YOUR_HUGGINGFACE_TOKEN
@@ -261,7 +263,68 @@ pytest test_config.py -v
 cd ..
 ```
 
-### 7. Verify Pipeline Services
+### 7. Deploy LiveKit Server
+
+LiveKit is the WebRTC media server that relays audio between the browser client and the orchestrator. It runs on the same GPU node via hostNetwork mode — no ALB, domain, or TLS required.
+
+**Generate credentials:**
+
+```bash
+# Generate a secure API key and secret
+LIVEKIT_API_KEY="devkey-$(openssl rand -hex 6)"
+LIVEKIT_API_SECRET=$(openssl rand -base64 32)
+echo "API Key:    $LIVEKIT_API_KEY"
+echo "API Secret: $LIVEKIT_API_SECRET"
+```
+
+**Update the values file:**
+
+Edit `helm/livekit/values.yaml` and replace the `CHANGE-ME-*` placeholders under `livekit.keys` with the generated credentials:
+
+```yaml
+keys:
+  your-api-key: your-api-secret
+```
+
+**Install the chart:**
+
+```bash
+helm repo add livekit https://helm.livekit.io
+helm install livekit livekit/livekit-server -f helm/livekit/values.yaml
+```
+
+**Verify:**
+
+```bash
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=livekit-server --timeout=60s
+kubectl get pods -l app.kubernetes.io/name=livekit-server -o wide
+# Should be on the same node as the voice pipeline pods
+```
+
+**Get the node public IP for browser client connection:**
+
+```bash
+NODE_IP=$(kubectl get pods -l app.kubernetes.io/name=livekit-server \
+  -o jsonpath='{.items[0].status.hostIP}')
+echo "LIVEKIT_URL=ws://${NODE_IP}:7880"
+```
+
+**Update the voice pipeline with LiveKit credentials:**
+
+```bash
+ECR_REPO=$(cd terraform && terraform output -raw orchestrator_ecr_repository_url)
+
+helm upgrade voice-pipeline helm/voice-pipeline/ \
+  --set orchestrator.image.repository=$ECR_REPO \
+  --set orchestrator.livekit.url="ws://${NODE_IP}:7880" \
+  --set orchestrator.livekit.apiKey="$LIVEKIT_API_KEY" \
+  --set orchestrator.livekit.apiSecret="$LIVEKIT_API_SECRET" \
+  --set speaches.env.HF_TOKEN=hf_YOUR_HUGGINGFACE_TOKEN
+```
+
+The orchestrator pod will restart and connect to the LiveKit room `voice-agent-room`.
+
+### 8. Verify Pipeline Services
 
 Once all pods are ready, verify each service is responding correctly using port-forwards.
 
@@ -359,6 +422,7 @@ If all checks pass, the pipeline is healthy and ready for the browser client and
 ## Teardown
 
 ```bash
+helm uninstall livekit
 helm uninstall voice-pipeline
 kubectl delete -f ../k8s/
 cd terraform
