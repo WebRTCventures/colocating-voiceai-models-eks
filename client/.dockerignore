@@ -1,0 +1,8 @@
+node_modules
+.next
+.env*
+.git
+*.md
+vitest.config.ts
+vitest.setup.ts
+__tests__
