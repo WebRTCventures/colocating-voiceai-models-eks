@@ -95,36 +95,18 @@ loadBalancer:
 # =============================================================================
 
 # =============================================================================
-# Pod Scheduling: Tolerations, Affinity, and Resources
+# Pod Scheduling and Resources
 # =============================================================================
-# Resource budget on g5.2xlarge (8 vCPUs, 32 GiB RAM):
-#   - Pipeline pods consume ~6.5 vCPUs (including LiveKit) and ~10.5 GiB requests
-#   - Remaining headroom is shared with kubelet overhead and daemonsets
-#   - LiveKit requests 500m CPU + 256Mi memory — well within the remaining capacity
+# LiveKit is a media relay — it's CPU-bound, not GPU-bound. It doesn't need
+# to be on the GPU node. The latency-sensitive path (STT → LLM → TTS) is
+# between the pipeline pods; the LiveKit↔Orchestrator hop is negligible
+# compared to the internet RTT from the browser.
+#
+# In production, LiveKit would typically run on its own node pool (e.g.,
+# c5.xlarge) scaled independently from inference workloads.
 # =============================================================================
 
-# Allow scheduling on GPU nodes tainted by Karpenter NodePool
-tolerations:
-  - key: "nvidia.com/gpu"
-    operator: "Equal"
-    value: "true"
-    effect: "NoSchedule"
-
-# Prefer co-location with the LLM pod for minimal intra-node audio latency
-affinity:
-  podAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/component
-                operator: In
-                values:
-                  - llm
-          topologyKey: kubernetes.io/hostname
-
-# Resource requests sized to fit within g5.2xlarge headroom after pipeline pods
+# Resource requests — lightweight for a single-session demo
 resources:
   requests:
     cpu: 500m

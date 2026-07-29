@@ -37,6 +37,7 @@
             # Utilities
             jq
             yq-go
+            openssl
           ];
 
           shellHook = ''

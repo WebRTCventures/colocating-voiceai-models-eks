@@ -36,52 +36,6 @@ data "aws_availability_zones" "available" {
   }
 }
 
-# --- EKS Cluster SG Cleanup ---
-# The EKS service creates a "primary cluster security group" that is NOT managed
-# by Terraform. On destroy, this SG can linger and block VPC deletion.
-# This null_resource runs a cleanup script on destroy to remove it.
-resource "null_resource" "eks_cluster_sg_cleanup" {
-  # Re-run if the cluster or VPC changes
-  triggers = {
-    cluster_name = var.cluster_name
-    region       = var.aws_region
-    vpc_id       = module.vpc.vpc_id
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      echo "Cleaning up orphaned EKS cluster security group(s)..."
-
-      # The EKS primary SG can be tagged with either:
-      #   - "aws:eks:cluster-name" = "<cluster>"  (newer EKS versions)
-      #   - "kubernetes.io/cluster/<cluster>" = "owned"  (documented in terraform-aws-eks FAQ)
-      # We check both to handle all EKS versions.
-
-      for FILTER in \
-        "Name=tag:aws:eks:cluster-name,Values=${self.triggers.cluster_name}" \
-        "Name=tag:kubernetes.io/cluster/${self.triggers.cluster_name},Values=owned"; do
-
-        SG_IDS=$(aws ec2 describe-security-groups \
-          --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "$FILTER" \
-          --query "SecurityGroups[].GroupId" --output text \
-          --region ${self.triggers.region} 2>/dev/null)
-
-        for SG_ID in $SG_IDS; do
-          if [ "$SG_ID" != "None" ] && [ -n "$SG_ID" ]; then
-            echo "Deleting orphaned EKS cluster SG: $SG_ID"
-            aws ec2 delete-security-group --group-id "$SG_ID" --region ${self.triggers.region} || true
-          fi
-        done
-      done
-
-      echo "EKS cluster SG cleanup complete."
-    EOT
-  }
-
-  depends_on = [module.eks]
-}
-
 # --- VPC & Networking ---
 
 module "vpc" {
@@ -145,6 +99,11 @@ module "eks" {
 
   # Allow the Terraform caller to manage the cluster
   enable_cluster_creator_admin_permissions = true
+
+  # Don't tag the EKS-managed primary security group — custom tags prevent
+  # EKS from auto-deleting it on cluster destruction, blocking VPC deletion.
+  # See: https://github.com/terraform-aws-modules/terraform-aws-eks/pull/2006
+  create_cluster_primary_security_group_tags = false
 
   tags = local.common_tags
 }
@@ -269,6 +228,55 @@ resource "aws_vpc_security_group_egress_rule" "all_ipv6" {
   cidr_ipv6         = "::/0"
 
   tags = local.common_tags
+}
+
+# --- Cluster Security Group Rules (EKS Auto Mode nodes) ---
+# EKS Auto Mode nodes use the EKS-managed "primary" cluster security group
+# (eks-cluster-sg-<name>-*), NOT the module-created cluster_security_group_id.
+# These rules enable external browser clients to reach LiveKit via hostNetwork.
+
+# Ingress: TCP 7880 from 0.0.0.0/0 (LiveKit WebSocket signaling - cluster SG)
+resource "aws_vpc_security_group_ingress_rule" "cluster_livekit_signaling_ipv4" {
+  security_group_id = module.eks.cluster_primary_security_group_id
+  description       = "LiveKit WebSocket signaling (IPv4) - Auto Mode nodes"
+  ip_protocol       = "tcp"
+  from_port         = 7880
+  to_port           = 7880
+  cidr_ipv4         = "0.0.0.0/0"
+  tags              = local.common_tags
+}
+
+# Ingress: TCP 7880 from ::/0 (LiveKit WebSocket signaling IPv6 - cluster SG)
+resource "aws_vpc_security_group_ingress_rule" "cluster_livekit_signaling_ipv6" {
+  security_group_id = module.eks.cluster_primary_security_group_id
+  description       = "LiveKit WebSocket signaling (IPv6) - Auto Mode nodes"
+  ip_protocol       = "tcp"
+  from_port         = 7880
+  to_port           = 7880
+  cidr_ipv6         = "::/0"
+  tags              = local.common_tags
+}
+
+# Ingress: UDP 50000-60000 from 0.0.0.0/0 (WebRTC media - cluster SG)
+resource "aws_vpc_security_group_ingress_rule" "cluster_webrtc_media_ipv4" {
+  security_group_id = module.eks.cluster_primary_security_group_id
+  description       = "WebRTC media UDP (IPv4) - Auto Mode nodes"
+  ip_protocol       = "udp"
+  from_port         = 50000
+  to_port           = 60000
+  cidr_ipv4         = "0.0.0.0/0"
+  tags              = local.common_tags
+}
+
+# Ingress: UDP 50000-60000 from ::/0 (WebRTC media IPv6 - cluster SG)
+resource "aws_vpc_security_group_ingress_rule" "cluster_webrtc_media_ipv6" {
+  security_group_id = module.eks.cluster_primary_security_group_id
+  description       = "WebRTC media UDP (IPv6) - Auto Mode nodes"
+  ip_protocol       = "udp"
+  from_port         = 50000
+  to_port           = 60000
+  cidr_ipv6         = "::/0"
+  tags              = local.common_tags
 }
 
 
