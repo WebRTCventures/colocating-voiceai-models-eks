@@ -14,6 +14,14 @@
 replicaCount: 1
 
 # =============================================================================
+# Image Version Override
+# =============================================================================
+# The official Helm chart defaults to an older server version. Pin to v1.12
+# to ensure compatibility with livekit-client SDK v2.x (protocol 17, /rtc/v1 path).
+image:
+  tag: v1.12.0
+
+# =============================================================================
 # LiveKit Server Configuration
 # =============================================================================
 # This section is rendered into a ConfigMap as config.yaml by the chart.
@@ -54,7 +62,7 @@ livekit:
   # share the exact same key/secret pair for token authentication to work.
   # ---------------------------------------------------------------------------
   keys:
-    CHANGE-ME-api-key: CHANGE-ME-secret-must-be-at-least-32-chars-long!!
+    devkey-82aa9332681b: nYQLIHF9mJZ666l1QaJxqc0FMP1Y/0E5V9l7vug5g2Q=
 
 # =============================================================================
 # Host Network Configuration
