@@ -5,7 +5,7 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 ## Project Structure
 
 ```
-├── terraform/              # AWS infrastructure (VPC, EKS, IAM, observability)
+├── terraform/              # AWS infrastructure (VPC, EKS, IAM)
 │   ├── main.tf
 │   ├── variables.tf
 │   ├── outputs.tf
@@ -29,7 +29,7 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 ├── orchestrator/           # Pipecat voice agent (VAD → STT → LLM → TTS)
 │   ├── agent.py            # Main entry point — pipeline assembly + lifecycle
 │   ├── config.py           # Environment variable loading and validation
-│   ├── metrics.py          # Prometheus histograms + /health + /metrics server
+│   ├── metrics.py          # Health endpoint + /metrics server
 │   ├── observers.py        # Pipeline observer for per-stage latency recording
 │   ├── livekit_token.py    # LiveKit JWT token generation
 │   ├── requirements.txt    # Python dependencies (pipecat-ai, livekit, prometheus)
@@ -47,10 +47,8 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   ├── Dockerfile                  # Multi-stage build (node:20-alpine, standalone)
 │   ├── .env.local.example          # Required env vars documentation
 │   └── package.json
-├── k8s/                    # Kubernetes manifests — monitoring only
-│   ├── gpu-nodepool.yaml   # (reference only — managed by Helm chart)
-│   ├── dcgm-exporter.yaml  # NVIDIA GPU metrics DaemonSet
-│   └── grafana.yaml        # Self-hosted Grafana for dashboards
+├── k8s/                    # Kubernetes manifests (reference only)
+│   └── gpu-nodepool.yaml   # (reference only — managed by Helm chart)
 ├── flake.nix               # Nix dev environment
 └── .envrc                  # direnv activation
 ```
@@ -59,11 +57,11 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 
 ### AWS Permissions
 
-Use an IAM user or role with `AdministratorAccess` for the demo. The infrastructure touches EKS, EC2, IAM, VPC, Managed Prometheus, Managed Grafana, and IAM Identity Center.
+Use an IAM user or role with `AdministratorAccess` for the demo. The infrastructure touches EKS, EC2, IAM, and VPC.
 
 ### Service Quota
 
-You need at least **8 vCPUs** of G-instance capacity (one g5.2xlarge = 8 vCPUs).
+You need at least **16 vCPUs** of G-instance capacity (two g5.2xlarge = 16 vCPUs).
 
 Check your quota:
 
@@ -75,7 +73,7 @@ aws service-quotas get-service-quota \
   --query 'Quota.Value'
 ```
 
-If less than 8, request an increase via the [Service Quotas console](https://console.aws.amazon.com/servicequotas/) → Amazon EC2 → "Running On-Demand G and VT instances".
+If less than 16, request an increase via the [Service Quotas console](https://console.aws.amazon.com/servicequotas/) → Amazon EC2 → "Running On-Demand G and VT instances".
 
 ### CLI Tools
 
@@ -97,9 +95,8 @@ The voice AI pipeline uses Llama 3.1. You'll need a [Hugging Face token](https:/
 
 | Resource | Cost |
 |----------|------|
-| g5.2xlarge | ~$1.21/hr |
+| 2× g5.2xlarge | ~$2.42/hr |
 | EKS cluster | $0.10/hr |
-| Managed Prometheus | ~$0.01/hr |
 
 A full demo session (1-2 hours) costs under $10. Tear down when done.
 
@@ -141,28 +138,7 @@ $(terraform output -raw update_kubeconfig_command)
 kubectl cluster-info
 ```
 
-### 4. Apply Monitoring Manifests
-
-```bash
-kubectl apply -f ../k8s/dcgm-exporter.yaml
-kubectl apply -f ../k8s/grafana.yaml
-```
-
-Verify:
-
-```bash
-kubectl get ds -n monitoring    # dcgm-exporter (0 desired until GPU node exists)
-kubectl get pods -n monitoring  # grafana pod running
-```
-
-Access Grafana via port-forward:
-
-```bash
-kubectl port-forward -n monitoring svc/grafana 3000:3000
-# Open http://localhost:3000 (anonymous admin access enabled)
-```
-
-### 5. Build the Orchestrator Image
+### 4. Build the Orchestrator Image
 
 The orchestrator is a Pipecat voice agent that wires VAD → STT → LLM → TTS over LiveKit WebRTC. Build and push the container image to the ECR repository provisioned by Terraform:
 
@@ -197,11 +173,11 @@ The orchestrator reads all configuration from environment variables (injected vi
 | `TTS_MODEL` | No | TTS model name (default: service default) |
 | `LLM_MODEL` | No | LLM model name (default: service default) |
 | `VAD_SILENCE_THRESHOLD_MS` | No | Silence threshold in ms (default: 200, range: 100–2000) |
-| `METRICS_PORT` | No | Prometheus metrics port (default: 8080) |
+| `METRICS_PORT` | No | Health/metrics port (default: 8080) |
 
-The container exposes `/health` (readiness probe) and `/metrics` (Prometheus scraping) on the metrics port.
+The container exposes `/health` (readiness probe) on the metrics port.
 
-### 6. Deploy LiveKit Server
+### 5. Deploy LiveKit Server
 
 LiveKit is the WebRTC media server that relays audio between the browser client and the orchestrator. It runs on the same GPU node via hostNetwork mode — no ALB, domain, or TLS required.
 
@@ -231,28 +207,34 @@ helm repo add livekit https://helm.livekit.io
 helm install livekit livekit/livekit-server -f helm/livekit/values.yaml
 ```
 
-### 7. Deploy Voice Pipeline (Helm)
+### 6. Deploy Voice Pipeline (Helm)
 
 The voice pipeline chart deploys LLM (vLLM), Speaches (STT+TTS), and the Pipecat Orchestrator as colocated pods on a single GPU node.
 
-The orchestrator connects to LiveKit via the Kubernetes Service DNS name — no IP discovery or ordering dependency needed:
+The orchestrator connects to LiveKit via the node's private IP. LiveKit runs with `hostNetwork: true`, and in EKS Auto Mode the ClusterIP Service does not route traffic to hostNetwork pods across nodes. You must deploy LiveKit first (step 6) and then pass its private IP to the pipeline chart:
+
+```bash
+# Get the LiveKit pod's node-internal IP
+LIVEKIT_IP=$(kubectl get pods -l app.kubernetes.io/name=livekit-server \
+  -o jsonpath='{.items[0].status.hostIP}')
+
+ECR_REPO=$(cd terraform && terraform output -raw orchestrator_ecr_repository_url)
+```
 
 **Default (colocated mode):**
 
 ```bash
-ECR_REPO=$(cd terraform && terraform output -raw orchestrator_ecr_repository_url)
-
 helm install voice-pipeline helm/voice-pipeline/ \
   --set orchestrator.image.repository=$ECR_REPO \
-  --set orchestrator.livekit.url="ws://livekit-livekit-server:7880" \
+  --set orchestrator.livekit.url="ws://${LIVEKIT_IP}:7880" \
   --set orchestrator.livekit.apiKey="$LIVEKIT_API_KEY" \
   --set orchestrator.livekit.apiSecret="$LIVEKIT_API_SECRET" \
   --set speaches.env.HF_TOKEN=$HUGGINGFACE_TOKEN
 ```
 
-This provisions a Karpenter NodePool, schedules the LLM pod on a GPU node, and pulls Speaches + Orchestrator onto the same node via pod affinity. LiveKit's soft affinity will also pull it to the GPU node once the LLM pod exists.
+This provisions a Karpenter NodePool, schedules the LLM pod on a GPU node, and pulls Speaches + Orchestrator onto the same node via pod affinity.
 
-> **Why `ws://livekit-livekit-server:7880`?** The official LiveKit Helm chart always creates a ClusterIP Service, even with `loadBalancer.type: disable`. The orchestrator resolves it via Kubernetes DNS — no node IP needed, no ordering dependency, works regardless of which pod starts first.
+> **Why the private IP instead of DNS?** LiveKit uses `hostNetwork: true` to expose WebRTC ports directly. In EKS Auto Mode, the ClusterIP Service created by the LiveKit Helm chart does not correctly route traffic to hostNetwork pods on other nodes. Using the node's private IP bypasses this limitation entirely. This means LiveKit must be deployed before the voice pipeline so its IP is known.
 
 **Distributed mode** (pods on separate nodes, for latency comparison):
 
@@ -260,7 +242,7 @@ This provisions a Karpenter NodePool, schedules the LLM pod on a GPU node, and p
 helm install voice-pipeline helm/voice-pipeline/ \
   -f helm/voice-pipeline/values-distributed.yaml \
   --set orchestrator.image.repository=$ECR_REPO \
-  --set orchestrator.livekit.url="ws://livekit-livekit-server:7880" \
+  --set orchestrator.livekit.url="ws://${LIVEKIT_IP}:7880" \
   --set orchestrator.livekit.apiKey="$LIVEKIT_API_KEY" \
   --set orchestrator.livekit.apiSecret="$LIVEKIT_API_SECRET" \
   --set speaches.env.HF_TOKEN=$HUGGINGFACE_TOKEN
@@ -272,7 +254,7 @@ helm install voice-pipeline helm/voice-pipeline/ \
 helm install voice-pipeline helm/voice-pipeline/ \
   -f helm/voice-pipeline/values-production.yaml \
   --set orchestrator.image.repository=$ECR_REPO \
-  --set orchestrator.livekit.url="ws://livekit-livekit-server:7880" \
+  --set orchestrator.livekit.url="ws://${LIVEKIT_IP}:7880" \
   --set orchestrator.livekit.apiKey="$LIVEKIT_API_KEY" \
   --set orchestrator.livekit.apiSecret="$LIVEKIT_API_SECRET" \
   --set speaches.env.HF_TOKEN=$HUGGINGFACE_TOKEN
@@ -292,7 +274,7 @@ kubectl get pods -o wide
 # livekit pod may be on a different node — that's expected
 ```
 
-### 8. Get the public IP for the browser client
+### 7. Get the public IP for the browser client
 
 The browser connects to LiveKit from outside the cluster via its node's public IP:
 
@@ -322,7 +304,7 @@ pytest test_config.py -v
 cd ..
 ```
 
-### 9. Run the Browser Client
+### 8. Run the Browser Client
 
 The browser client is a Next.js app that connects to the LiveKit room, captures your microphone, plays back agent responses, and displays per-stage latency metrics. It exercises the full pipeline end-to-end (mic → LiveKit → orchestrator → VAD → STT → LLM → TTS → LiveKit → speakers).
 
@@ -382,7 +364,6 @@ docker run -p 3000:3000 \
 ```bash
 helm uninstall livekit
 helm uninstall voice-pipeline
-kubectl delete -f ../k8s/
 cd terraform
 terraform destroy
 ```

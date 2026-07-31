@@ -14,8 +14,8 @@ aws_region = "us-east-1"
 # Primary availability zone for GPU workloads (must have g5 capacity)
 availability_zone = "us-east-1a"
 
-# EKS Kubernetes version (must be 1.31 or later)
-kubernetes_version = "1.31"
+# EKS Kubernetes version (must be 1.32 or later)
+kubernetes_version = "1.36"
 
 # CIDR block for the VPC
 vpc_cidr = "10.0.0.0/16"

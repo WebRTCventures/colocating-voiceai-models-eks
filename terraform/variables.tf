@@ -32,13 +32,13 @@ variable "availability_zone" {
 }
 
 variable "kubernetes_version" {
-  description = "EKS Kubernetes version (must be >= 1.31)"
+  description = "EKS Kubernetes version (must be >= 1.32 for standard support)"
   type        = string
-  default     = "1.31"
+  default     = "1.36"
 
   validation {
-    condition     = tonumber(var.kubernetes_version) >= 1.31
-    error_message = "Kubernetes version must be 1.31 or later."
+    condition     = tonumber(var.kubernetes_version) >= 1.32
+    error_message = "Kubernetes version must be 1.32 or later."
   }
 }
 

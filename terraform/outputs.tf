@@ -8,11 +8,6 @@ output "update_kubeconfig_command" {
   value       = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.aws_region}"
 }
 
-output "prometheus_remote_write_endpoint" {
-  description = "Amazon Managed Prometheus remote-write endpoint URL"
-  value       = "${aws_prometheus_workspace.main.prometheus_endpoint}api/v1/remote_write"
-}
-
 output "cluster_name" {
   description = "EKS cluster name"
   value       = module.eks.cluster_name

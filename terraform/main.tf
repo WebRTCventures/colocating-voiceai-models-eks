@@ -342,86 +342,6 @@ resource "aws_eks_pod_identity_association" "model_serving" {
   tags = local.common_tags
 }
 
-# -- Prometheus Role (APS RemoteWrite for metrics ingestion) --
-
-resource "aws_iam_role" "prometheus" {
-  name               = "${var.cluster_name}-prometheus"
-  assume_role_policy = data.aws_iam_policy_document.pod_identity_trust.json
-
-  tags = local.common_tags
-}
-
-data "aws_iam_policy_document" "prometheus" {
-  statement {
-    effect = "Allow"
-
-    actions = ["aps:RemoteWrite"]
-
-    resources = [aws_prometheus_workspace.main.arn]
-  }
-}
-
-resource "aws_iam_policy" "prometheus" {
-  name   = "${var.cluster_name}-prometheus"
-  policy = data.aws_iam_policy_document.prometheus.json
-
-  tags = local.common_tags
-}
-
-resource "aws_iam_role_policy_attachment" "prometheus" {
-  role       = aws_iam_role.prometheus.name
-  policy_arn = aws_iam_policy.prometheus.arn
-}
-
-resource "aws_eks_pod_identity_association" "prometheus" {
-  cluster_name    = module.eks.cluster_name
-  namespace       = "monitoring"
-  service_account = "prometheus"
-  role_arn        = aws_iam_role.prometheus.arn
-
-  tags = local.common_tags
-}
-
-# -- DCGM Exporter Role (APS RemoteWrite for GPU metrics) --
-
-resource "aws_iam_role" "dcgm_exporter" {
-  name               = "${var.cluster_name}-dcgm-exporter"
-  assume_role_policy = data.aws_iam_policy_document.pod_identity_trust.json
-
-  tags = local.common_tags
-}
-
-data "aws_iam_policy_document" "dcgm_exporter" {
-  statement {
-    effect = "Allow"
-
-    actions = ["aps:RemoteWrite"]
-
-    resources = [aws_prometheus_workspace.main.arn]
-  }
-}
-
-resource "aws_iam_policy" "dcgm_exporter" {
-  name   = "${var.cluster_name}-dcgm-exporter"
-  policy = data.aws_iam_policy_document.dcgm_exporter.json
-
-  tags = local.common_tags
-}
-
-resource "aws_iam_role_policy_attachment" "dcgm_exporter" {
-  role       = aws_iam_role.dcgm_exporter.name
-  policy_arn = aws_iam_policy.dcgm_exporter.arn
-}
-
-resource "aws_eks_pod_identity_association" "dcgm_exporter" {
-  cluster_name    = module.eks.cluster_name
-  namespace       = "monitoring"
-  service_account = "dcgm-exporter"
-  role_arn        = aws_iam_role.dcgm_exporter.arn
-
-  tags = local.common_tags
-}
-
 # --- ECR Repository (Orchestrator Image) ---
 
 resource "aws_ecr_repository" "orchestrator" {
@@ -457,16 +377,4 @@ resource "aws_ecr_lifecycle_policy" "orchestrator" {
   })
 }
 
-# --- Amazon Managed Prometheus ---
-
-resource "aws_prometheus_workspace" "main" {
-  alias = "${var.cluster_name}-prometheus"
-
-  # Note: Amazon Managed Prometheus retention is 150 days by default.
-  # Configurable retention (e.g., 30 days per requirement 6.1) requires
-  # aws_prometheus_workspace_configuration which needs AWS provider >= 6.28.
-  # With provider ~> 5.0, retention is managed by AWS at the default 150 days.
-
-  tags = local.common_tags
-}
 
