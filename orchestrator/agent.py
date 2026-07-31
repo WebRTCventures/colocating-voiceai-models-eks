@@ -114,7 +114,7 @@ async def main():
     )
 
     # Create pipeline task with metrics observer
-    task = PipelineTask(pipeline, observers=[MetricsObserver()])
+    task = PipelineTask(pipeline, observers=[MetricsObserver(transport=transport)])
 
     # Set up the pipeline runner
     runner = PipelineRunner()
@@ -140,10 +140,67 @@ async def main():
         logging.info(f"Participant left: {participant_id} ({reason})")
         await task.cancel()
 
-    # Run the pipeline
-    await runner.run(task)
+    # Run the pipeline — restart on participant disconnect so the agent
+    # is always available for the next session without pod restarts.
+    while True:
+        await runner.run(task)
+        logging.info("Session ended. Reconnecting to room for next participant...")
 
-    # Cleanup metrics server on exit
+        # Rebuild transport, context, and pipeline for a fresh session
+        transport = LiveKitTransport(
+            url=config.livekit_url,
+            token=generate_token(config),
+            room_name="voice-agent-room",
+            params=LiveKitParams(
+                audio_in_enabled=True,
+                audio_out_enabled=True,
+            ),
+        )
+
+        context = LLMContext(messages=[{"role": "system", "content": SYSTEM_PROMPT}])
+        user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+            context,
+            user_params=LLMUserAggregatorParams(
+                vad_analyzer=SileroVADAnalyzer(
+                    params=VADParams(stop_secs=vad_stop_secs)
+                ),
+                user_turn_strategies=UserTurnStrategies(
+                    start=[VADUserTurnStartStrategy()],
+                    stop=[
+                        SpeechTimeoutUserTurnStopStrategy(
+                            user_speech_timeout=vad_stop_secs
+                        )
+                    ],
+                ),
+            ),
+        )
+
+        pipeline = Pipeline(
+            [
+                transport.input(),
+                stt,
+                user_aggregator,
+                llm,
+                tts,
+                transport.output(),
+                assistant_aggregator,
+            ]
+        )
+        task = PipelineTask(pipeline, observers=[MetricsObserver(transport=transport)])
+
+        @transport.event_handler("on_first_participant_joined")
+        async def on_first_participant_joined(transport_obj, participant_id):
+            logging.info(f"First participant joined: {participant_id}")
+            await task.queue_frame(LLMContextFrame(context=context))
+
+        @transport.event_handler("on_participant_left")
+        async def on_participant_left(transport_obj, participant_id, reason):
+            logging.info(f"Participant left: {participant_id} ({reason})")
+            await task.cancel()
+
+        await asyncio.sleep(1)  # Brief pause before reconnecting
+
+    # Cleanup metrics server on exit (reached only via SIGTERM)
     await metrics_runner.cleanup()
 
 
