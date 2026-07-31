@@ -57,9 +57,18 @@ spec:
             requests:
               cpu: {{ .Values.speaches.resources.requests.cpu | quote }}
               memory: {{ .Values.speaches.resources.requests.memory }}
+              {{- if .Values.speaches.resources.requests }}
+              {{- if index .Values.speaches.resources.requests "nvidia.com/gpu" }}
+              nvidia.com/gpu: {{ index .Values.speaches.resources.requests "nvidia.com/gpu" | quote }}
+              {{- end }}
+              {{- end }}
             limits:
-              cpu: {{ .Values.speaches.resources.limits.cpu | quote }}
               memory: {{ .Values.speaches.resources.limits.memory }}
+              {{- if .Values.speaches.resources.limits }}
+              {{- if index .Values.speaches.resources.limits "nvidia.com/gpu" }}
+              nvidia.com/gpu: {{ index .Values.speaches.resources.limits "nvidia.com/gpu" | quote }}
+              {{- end }}
+              {{- end }}
           volumeMounts:
             - name: hf-cache
               mountPath: /home/ubuntu/.cache/huggingface/hub
@@ -80,6 +89,6 @@ spec:
       volumes:
         - name: hf-cache
           emptyDir: {}
-      {{- include "voice-pipeline.cpuPodAffinity" . | nindent 6 }}
+      {{- include "voice-pipeline.gpuPodAffinity" . | nindent 6 }}
       {{- include "voice-pipeline.gpuToleration" (dict "tolerateGpuTaint" .Values.speaches.tolerateGpuTaint "root" .) | nindent 6 }}
 {{- end }}

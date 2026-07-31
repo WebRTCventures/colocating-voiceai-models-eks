@@ -21,7 +21,7 @@ llm:
     tag: server-cuda
   model: hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
   args:
-    gpuMemoryUtilization: "0.85"
+    gpuMemoryUtilization: "0.90"
     maxModelLen: "4096"
   resources:
     requests:
@@ -48,23 +48,24 @@ speaches:
   tolerateGpuTaint: true
   image:
     repository: ghcr.io/speaches-ai/speaches
-    tag: "0.9.0-rc.3-cpu"
+    tag: "0.9.0-rc.3-cuda"
   env:
     WHISPER__MODEL: deepdml/faster-whisper-large-v3-turbo-ct2
-    WHISPER__INFERENCE_DEVICE: cpu
-    WHISPER__COMPUTE_TYPE: int8
+    WHISPER__INFERENCE_DEVICE: cuda
+    WHISPER__COMPUTE_TYPE: float16
     # HF_TOKEN: ""  # Set via --set speaches.env.HF_TOKEN=hf_xxx (required for model download)
   resources:
     requests:
-      cpu: "3"
-      memory: 2Gi
-    limits:
-      cpu: "4"
+      cpu: "2"
       memory: 4Gi
+      nvidia.com/gpu: "1"
+    limits:
+      memory: 8Gi
+      nvidia.com/gpu: "1"
   readinessProbe:
-    initialDelaySeconds: 60
+    initialDelaySeconds: 90
     periodSeconds: 10
-    failureThreshold: 3
+    failureThreshold: 6
   livenessProbe:
     initialDelaySeconds: 120
     periodSeconds: 30

@@ -17,7 +17,7 @@ voice-pipeline/group: {{ .Values.pipeline.group }}
 {{- end -}}
 
 {{/*
-Pod affinity for CPU pods (Speaches, Orchestrator) to colocate with the LLM pod.
+Pod affinity for CPU pods (Orchestrator) to colocate with the LLM pod on the same node.
 When scheduling.colocated is true, renders requiredDuringSchedulingIgnoredDuringExecution
 targeting app.kubernetes.io/component: llm on the same node.
 When scheduling.colocated is false, renders empty (no affinity constraints).
@@ -35,6 +35,26 @@ affinity:
               values:
                 - llm
         topologyKey: kubernetes.io/hostname
+{{- end }}
+{{- end -}}
+
+{{/*
+Pod affinity for GPU pods (Speaches) to stay in the same zone as the LLM pod
+but NOT require the same node (since each needs its own GPU).
+Usage: {{ include "voice-pipeline.gpuPodAffinity" . }}
+*/}}
+{{- define "voice-pipeline.gpuPodAffinity" -}}
+{{- if .Values.scheduling.colocated }}
+affinity:
+  podAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/component
+              operator: In
+              values:
+                - llm
+        topologyKey: topology.kubernetes.io/zone
 {{- end }}
 {{- end -}}
 
