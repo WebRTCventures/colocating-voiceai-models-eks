@@ -1,0 +1,89 @@
+{{- if .Values.speaches.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-pipeline-speaches
+  labels:
+    {{- include "voice-pipeline.labels" . | nindent 4 }}
+    {{- include "voice-pipeline.pipelineLabels" . | nindent 4 }}
+    app.kubernetes.io/component: speaches
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: speaches
+  template:
+    metadata:
+      labels:
+        {{- include "voice-pipeline.labels" . | nindent 8 }}
+        {{- include "voice-pipeline.pipelineLabels" . | nindent 8 }}
+        app.kubernetes.io/component: speaches
+    spec:
+      initContainers:
+        - name: download-models
+          image: "{{ .Values.speaches.image.repository }}:{{ .Values.speaches.image.tag }}"
+          command: ["python3", "-c"]
+          args:
+            - |
+              from huggingface_hub import snapshot_download
+              print("Downloading STT model...")
+              snapshot_download("{{ .Values.speaches.env.WHISPER__MODEL }}")
+              print("STT model ready.")
+              {{- if .Values.orchestrator.ttsModel }}
+              print("Downloading TTS model...")
+              snapshot_download("{{ .Values.orchestrator.ttsModel }}")
+              print("TTS model ready.")
+              {{- end }}
+          env:
+            {{- range $key, $value := .Values.speaches.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /home/ubuntu/.cache/huggingface/hub
+      containers:
+        - name: speaches
+          image: "{{ .Values.speaches.image.repository }}:{{ .Values.speaches.image.tag }}"
+          env:
+            {{- range $key, $value := .Values.speaches.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.speaches.port }}
+              protocol: TCP
+          resources:
+            requests:
+              cpu: {{ .Values.speaches.resources.requests.cpu | quote }}
+              memory: {{ .Values.speaches.resources.requests.memory }}
+              nvidia.com/gpu: {{ index .Values.speaches.resources.requests "nvidia.com/gpu" | quote }}
+            limits:
+              memory: {{ .Values.speaches.resources.limits.memory }}
+              nvidia.com/gpu: {{ index .Values.speaches.resources.limits "nvidia.com/gpu" | quote }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /home/ubuntu/.cache/huggingface/hub
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.speaches.port }}
+            initialDelaySeconds: {{ .Values.speaches.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.speaches.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.speaches.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.speaches.port }}
+            initialDelaySeconds: {{ .Values.speaches.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.speaches.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.speaches.livenessProbe.failureThreshold }}
+      volumes:
+        - name: hf-cache
+          emptyDir: {}
+      tolerations:
+        - key: {{ .Values.gpu.taint.key }}
+          operator: Equal
+          value: {{ .Values.gpu.taint.value | quote }}
+          effect: {{ .Values.gpu.taint.effect }}
+{{- end }}

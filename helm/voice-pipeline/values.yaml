@@ -14,14 +14,14 @@ gpu:
     value: "true"
     effect: NoSchedule
 
-# LLM configuration (scheduling anchor — no affinity rules)
+# LLM configuration (own GPU node)
 llm:
   image:
     repository: public.ecr.aws/deep-learning-containers/vllm
     tag: server-cuda
   model: hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
   args:
-    gpuMemoryUtilization: "0.65"
+    gpuMemoryUtilization: "0.90"
     maxModelLen: "4096"
   resources:
     requests:
@@ -42,7 +42,7 @@ llm:
     failureThreshold: 3
   port: 8000
 
-# Speaches STT+TTS configuration (runs as sidecar in LLM pod, shares GPU)
+# Speaches STT+TTS configuration (own GPU node)
 speaches:
   enabled: true
   tolerateGpuTaint: true
@@ -53,14 +53,15 @@ speaches:
     WHISPER__MODEL: deepdml/faster-whisper-large-v3-turbo-ct2
     WHISPER__INFERENCE_DEVICE: cuda
     WHISPER__COMPUTE_TYPE: float16
-    UVICORN_PORT: "8001"
     # HF_TOKEN: ""  # Set via --set speaches.env.HF_TOKEN=hf_xxx (required for model download)
   resources:
     requests:
       cpu: "2"
       memory: 4Gi
+      nvidia.com/gpu: "1"
     limits:
       memory: 8Gi
+      nvidia.com/gpu: "1"
   readinessProbe:
     initialDelaySeconds: 90
     periodSeconds: 10
@@ -69,7 +70,7 @@ speaches:
     initialDelaySeconds: 120
     periodSeconds: 30
     failureThreshold: 5
-  port: 8001
+  port: 8000
 
 # Orchestrator configuration
 orchestrator:
@@ -92,24 +93,14 @@ orchestrator:
     apiKey: ""     # LiveKit API key
     apiSecret: ""  # LiveKit API secret
 
-# Production mode: separate STT/TTS pods (disabled by default)
-stt:
-  enabled: false
-  port: 8000
-
-tts:
-  enabled: false
-  port: 8000
-
 # Karpenter NodePool
 nodepool:
   enabled: true
   instanceTypes:
-    - g5.2xlarge
-    - g5.4xlarge
+    - g5.xlarge
   capacityType: on-demand
   availabilityZone: us-east-1a
-  gpuLimit: 1
+  gpuLimit: 2
   nodeClassRef:
     group: eks.amazonaws.com
     kind: NodeClass
