@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: voice-pipeline-llm
+  name: voice-pipeline-inference
   labels:
     {{- include "voice-pipeline.labels" . | nindent 4 }}
     {{- include "voice-pipeline.pipelineLabels" . | nindent 4 }}
-    app.kubernetes.io/component: llm
+    app.kubernetes.io/component: inference
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/component: llm
+      app.kubernetes.io/component: inference
   template:
     metadata:
       labels:
         {{- include "voice-pipeline.labels" . | nindent 8 }}
         {{- include "voice-pipeline.pipelineLabels" . | nindent 8 }}
-        app.kubernetes.io/component: llm
+        app.kubernetes.io/component: inference
     spec:
       {{- if .Values.speaches.enabled }}
       initContainers:

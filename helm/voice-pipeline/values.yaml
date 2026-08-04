@@ -73,17 +73,17 @@ speaches:
 
 # Orchestrator configuration
 orchestrator:
-  tolerateGpuTaint: true
+  tolerateGpuTaint: false
   image:
     repository: ""  # Set to your ECR URL: <account>.dkr.ecr.<region>.amazonaws.com/voiceai-eks/orchestrator
     tag: "latest"
   resources:
     requests:
       cpu: "1"
-      memory: 256Mi
+      memory: 512Mi
     limits:
       cpu: "2"
-      memory: 512Mi
+      memory: 2Gi
   port: 8080
   ttsModel: "speaches-ai/Kokoro-82M-v1.0-ONNX"
   # LiveKit connection (required for the orchestrator to start)
