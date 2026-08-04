@@ -1,48 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: voice-pipeline-inference
+  name: voice-pipeline-llm
   labels:
     {{- include "voice-pipeline.labels" . | nindent 4 }}
     {{- include "voice-pipeline.pipelineLabels" . | nindent 4 }}
-    app.kubernetes.io/component: inference
+    app.kubernetes.io/component: llm
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/component: inference
+      app.kubernetes.io/component: llm
   template:
     metadata:
       labels:
         {{- include "voice-pipeline.labels" . | nindent 8 }}
         {{- include "voice-pipeline.pipelineLabels" . | nindent 8 }}
-        app.kubernetes.io/component: inference
+        app.kubernetes.io/component: llm
     spec:
-      {{- if .Values.speaches.enabled }}
-      initContainers:
-        - name: download-models
-          image: "{{ .Values.speaches.image.repository }}:{{ .Values.speaches.image.tag }}"
-          command: ["python3", "-c"]
-          args:
-            - |
-              from huggingface_hub import snapshot_download
-              print("Downloading STT model...")
-              snapshot_download("{{ .Values.speaches.env.WHISPER__MODEL }}")
-              print("STT model ready.")
-              {{- if .Values.orchestrator.ttsModel }}
-              print("Downloading TTS model...")
-              snapshot_download("{{ .Values.orchestrator.ttsModel }}")
-              print("TTS model ready.")
-              {{- end }}
-          env:
-            {{- range $key, $value := .Values.speaches.env }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-          volumeMounts:
-            - name: hf-cache
-              mountPath: /home/ubuntu/.cache/huggingface/hub
-      {{- end }}
       containers:
         - name: vllm
           image: "{{ .Values.llm.image.repository }}:{{ .Values.llm.image.tag }}"
@@ -86,47 +61,6 @@ spec:
               port: {{ .Values.llm.port }}
             periodSeconds: {{ .Values.llm.livenessProbe.periodSeconds }}
             failureThreshold: {{ .Values.llm.livenessProbe.failureThreshold }}
-        {{- if .Values.speaches.enabled }}
-        - name: speaches
-          image: "{{ .Values.speaches.image.repository }}:{{ .Values.speaches.image.tag }}"
-          env:
-            {{- range $key, $value := .Values.speaches.env }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-          ports:
-            - containerPort: {{ .Values.speaches.port }}
-              protocol: TCP
-              name: speaches
-          resources:
-            requests:
-              cpu: {{ .Values.speaches.resources.requests.cpu | quote }}
-              memory: {{ .Values.speaches.resources.requests.memory }}
-            limits:
-              memory: {{ .Values.speaches.resources.limits.memory }}
-          volumeMounts:
-            - name: hf-cache
-              mountPath: /home/ubuntu/.cache/huggingface/hub
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.speaches.port }}
-            initialDelaySeconds: {{ .Values.speaches.readinessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.speaches.readinessProbe.periodSeconds }}
-            failureThreshold: {{ .Values.speaches.readinessProbe.failureThreshold }}
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.speaches.port }}
-            initialDelaySeconds: {{ .Values.speaches.livenessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.speaches.livenessProbe.periodSeconds }}
-            failureThreshold: {{ .Values.speaches.livenessProbe.failureThreshold }}
-        {{- end }}
-      {{- if .Values.speaches.enabled }}
-      volumes:
-        - name: hf-cache
-          emptyDir: {}
-      {{- end }}
       tolerations:
         - key: {{ .Values.gpu.taint.key }}
           operator: Equal

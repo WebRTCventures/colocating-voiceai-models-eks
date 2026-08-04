@@ -62,7 +62,7 @@ livekit:
   # share the exact same key/secret pair for token authentication to work.
   # ---------------------------------------------------------------------------
   keys:
-    devkey-2b2b75d22cc2: mKbvzfFP6LCm7YQfQW0kiVkzea4MevPgzI0YIiBsdXw=
+    mykey: mysecret
 
 # =============================================================================
 # Host Network Configuration
