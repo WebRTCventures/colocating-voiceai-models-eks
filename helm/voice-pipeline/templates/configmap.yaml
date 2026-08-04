@@ -15,7 +15,7 @@ data:
   {{- else }}
   TTS_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}/v1"
   {{- end }}
-  LLM_BASE_URL: "http://voice-pipeline-llm.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.llm.port }}/v1"
+  LLM_BASE_URL: "http://voice-pipeline-inference.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.llm.port }}/v1"
   LLM_MODEL: "{{ .Values.llm.model }}"
   STT_MODEL: "{{ .Values.speaches.env.WHISPER__MODEL | default .Values.stt.model }}"
   TTS_MODEL: "{{ .Values.orchestrator.ttsModel | default "speaches-ai/Kokoro-82M-v1.0-ONNX" }}"

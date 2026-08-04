@@ -2,13 +2,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: voice-pipeline-llm
+  name: voice-pipeline-inference
   labels:
     {{- include "voice-pipeline.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/component: llm
+    app.kubernetes.io/component: inference
   ports:
     - port: {{ .Values.llm.port }}
       targetPort: {{ .Values.llm.port }}
@@ -24,7 +24,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/component: llm
+    app.kubernetes.io/component: inference
   ports:
     - port: {{ .Values.speaches.port }}
       targetPort: {{ .Values.speaches.port }}

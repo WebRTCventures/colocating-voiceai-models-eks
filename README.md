@@ -25,15 +25,10 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   │   ├── configmap.yaml          # Endpoint URLs for service discovery
 │   │   └── karpenter-nodepool.yaml # GPU node provisioning
 │   └── tests/                      # helm-unittest test suites
-├── orchestrator/           # Pipecat voice agent (VAD → STT → LLM → TTS)
-│   ├── agent.py            # Main entry point — pipeline assembly + lifecycle
-│   ├── config.py           # Environment variable loading and validation
-│   ├── metrics.py          # Health endpoint + /metrics server
-│   ├── observers.py        # Pipeline observer for per-stage latency recording
-│   ├── livekit_token.py    # LiveKit JWT token generation
-│   ├── requirements.txt    # Python dependencies (pipecat-ai, livekit, prometheus)
-│   ├── Dockerfile          # Container image (python:3.11-slim, non-root)
-│   └── test_config.py      # Unit tests for config validation
+├── orchestrator/           # LiveKit Agents voice agent (VAD → STT → LLM → TTS)
+│   ├── agent.py            # Main entry point — agent worker + pipeline config
+│   ├── requirements.txt    # Python dependencies (livekit-agents, openai, silero)
+│   └── Dockerfile          # Container image (python:3.11-slim, non-root)
 ├── client/                 # Browser voice client (Next.js dashboard)
 │   ├── app/
 │   │   ├── api/token/route.ts      # LiveKit JWT generation (server-side)
@@ -139,7 +134,7 @@ kubectl cluster-info
 
 ### 4. Build the Orchestrator Image
 
-The orchestrator is a Pipecat voice agent that wires VAD → STT → LLM → TTS over LiveKit WebRTC. Build and push the container image to the ECR repository provisioned by Terraform:
+The orchestrator is a LiveKit Agents worker that connects STT → LLM → TTS using OpenAI-compatible endpoints (Speaches + vLLM). Build and push the container image to the ECR repository provisioned by Terraform:
 
 ```bash
 cd orchestrator
@@ -158,7 +153,7 @@ docker push $ECR_REPO:latest
 cd ..
 ```
 
-The orchestrator reads all configuration from environment variables (injected via the Helm chart's ConfigMap):
+The orchestrator reads configuration from environment variables (injected via the Helm chart's ConfigMap):
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -168,13 +163,11 @@ The orchestrator reads all configuration from environment variables (injected vi
 | `STT_BASE_URL` | Yes | Speaches STT endpoint |
 | `TTS_BASE_URL` | Yes | Speaches TTS endpoint |
 | `LLM_BASE_URL` | Yes | vLLM endpoint |
-| `STT_MODEL` | No | STT model name (default: service default) |
-| `TTS_MODEL` | No | TTS model name (default: service default) |
-| `LLM_MODEL` | No | LLM model name (default: service default) |
-| `VAD_SILENCE_THRESHOLD_MS` | No | Silence threshold in ms (default: 200, range: 100–2000) |
-| `METRICS_PORT` | No | Health/metrics port (default: 8080) |
+| `STT_MODEL` | No | STT model name (default: faster-whisper-large-v3-turbo) |
+| `TTS_MODEL` | No | TTS model name (default: Kokoro-82M) |
+| `LLM_MODEL` | No | LLM model name (default: Llama 3.1 8B AWQ) |
 
-The container exposes `/health` (readiness probe) on the metrics port.
+The agent registers as a LiveKit worker and is dispatched automatically when a participant joins a room.
 
 ### 5. Deploy LiveKit Server
 
@@ -293,15 +286,6 @@ echo "Browser LIVEKIT_URL=ws://${NODE_IP}:7880"
 
 ```bash
 helm unittest helm/voice-pipeline/
-```
-
-**Run orchestrator unit tests:**
-
-```bash
-cd orchestrator
-pip install -r requirements.txt pytest
-pytest test_config.py -v
-cd ..
 ```
 
 ### 8. Run the Browser Client

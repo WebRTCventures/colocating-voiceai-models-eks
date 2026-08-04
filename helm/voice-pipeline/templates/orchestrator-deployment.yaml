@@ -21,9 +21,6 @@ spec:
       containers:
         - name: orchestrator
           image: "{{ .Values.orchestrator.image.repository }}:{{ .Values.orchestrator.image.tag }}"
-          ports:
-            - containerPort: {{ .Values.orchestrator.port }}
-              protocol: TCP
           envFrom:
             - configMapRef:
                 name: voice-pipeline-endpoints
@@ -34,17 +31,3 @@ spec:
             limits:
               cpu: {{ .Values.orchestrator.resources.limits.cpu | quote }}
               memory: {{ .Values.orchestrator.resources.limits.memory }}
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.orchestrator.port }}
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.orchestrator.port }}
-            initialDelaySeconds: 10
-            periodSeconds: 30
-      {{- include "voice-pipeline.cpuPodAffinity" . | nindent 6 }}
-      {{- include "voice-pipeline.gpuToleration" (dict "tolerateGpuTaint" .Values.orchestrator.tolerateGpuTaint "root" .) | nindent 6 }}

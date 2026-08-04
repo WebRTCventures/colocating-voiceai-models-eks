@@ -10,14 +10,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY agent.py config.py metrics.py livekit_token.py observers.py ./
+COPY agent.py ./
 
 # Switch to non-root user
 USER agent
 
-EXPOSE 8080
-
 # SIGTERM is forwarded to Python for graceful shutdown
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["python", "agent.py"]
+# LiveKit Agents uses 'start' for production mode (connects to LiveKit server
+# and registers as a worker, dispatched on demand when participants join)
+ENTRYPOINT ["python", "agent.py", "start"]
