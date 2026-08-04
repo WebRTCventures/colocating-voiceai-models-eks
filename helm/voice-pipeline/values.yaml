@@ -21,7 +21,7 @@ llm:
     tag: server-cuda
   model: hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
   args:
-    gpuMemoryUtilization: "0.90"
+    gpuMemoryUtilization: "0.65"
     maxModelLen: "4096"
   resources:
     requests:
@@ -42,7 +42,7 @@ llm:
     failureThreshold: 3
   port: 8000
 
-# Speaches STT+TTS configuration
+# Speaches STT+TTS configuration (runs as sidecar in LLM pod, shares GPU)
 speaches:
   enabled: true
   tolerateGpuTaint: true
@@ -53,15 +53,14 @@ speaches:
     WHISPER__MODEL: deepdml/faster-whisper-large-v3-turbo-ct2
     WHISPER__INFERENCE_DEVICE: cuda
     WHISPER__COMPUTE_TYPE: float16
+    UVICORN_PORT: "8001"
     # HF_TOKEN: ""  # Set via --set speaches.env.HF_TOKEN=hf_xxx (required for model download)
   resources:
     requests:
       cpu: "2"
       memory: 4Gi
-      nvidia.com/gpu: "1"
     limits:
       memory: 8Gi
-      nvidia.com/gpu: "1"
   readinessProbe:
     initialDelaySeconds: 90
     periodSeconds: 10
@@ -70,7 +69,7 @@ speaches:
     initialDelaySeconds: 120
     periodSeconds: 30
     failureThreshold: 5
-  port: 8000
+  port: 8001
 
 # Orchestrator configuration
 orchestrator:
@@ -110,7 +109,7 @@ nodepool:
     - g5.4xlarge
   capacityType: on-demand
   availabilityZone: us-east-1a
-  gpuLimit: 2
+  gpuLimit: 1
   nodeClassRef:
     group: eks.amazonaws.com
     kind: NodeClass

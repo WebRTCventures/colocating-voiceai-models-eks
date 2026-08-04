@@ -24,7 +24,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/component: speaches
+    app.kubernetes.io/component: llm
   ports:
     - port: {{ .Values.speaches.port }}
       targetPort: {{ .Values.speaches.port }}
