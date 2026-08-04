@@ -61,7 +61,7 @@ Use an IAM user or role with `AdministratorAccess` for the demo. The infrastruct
 
 ### Service Quota
 
-You need at least **16 vCPUs** of G-instance capacity (two g5.2xlarge = 16 vCPUs).
+You need at least **8 vCPUs** of G-instance capacity (one g5.2xlarge = 8 vCPUs).
 
 Check your quota:
 
@@ -73,7 +73,7 @@ aws service-quotas get-service-quota \
   --query 'Quota.Value'
 ```
 
-If less than 16, request an increase via the [Service Quotas console](https://console.aws.amazon.com/servicequotas/) → Amazon EC2 → "Running On-Demand G and VT instances".
+If less than 8, request an increase via the [Service Quotas console](https://console.aws.amazon.com/servicequotas/) → Amazon EC2 → "Running On-Demand G and VT instances".
 
 ### CLI Tools
 
@@ -95,10 +95,10 @@ The voice AI pipeline uses Llama 3.1. You'll need a [Hugging Face token](https:/
 
 | Resource | Cost |
 |----------|------|
-| 2× g5.2xlarge | ~$2.42/hr |
+| g5.2xlarge | ~$1.21/hr |
 | EKS cluster | $0.10/hr |
 
-A full demo session (1-2 hours) costs under $10. Tear down when done.
+A full demo session (1-2 hours) costs under $5. Tear down when done.
 
 ---
 
