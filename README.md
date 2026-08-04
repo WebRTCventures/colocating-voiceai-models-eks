@@ -1,6 +1,6 @@
 # Colocating Voice AI Models on EKS
 
-EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline (LiveKit + GPU-accelerated LLM inference) on a single g5.2xlarge node.
+EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline (STT + LLM + TTS sharing a single A10G GPU, with LiveKit WebRTC transport) on a g5.2xlarge node.
 
 ## Project Structure
 
@@ -19,8 +19,7 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   ├── values-production.yaml      # Override: g5.12xlarge + NVIDIA NIM
 │   ├── templates/
 │   │   ├── _helpers.tpl            # Shared labels, affinity, tolerations
-│   │   ├── llm-deployment.yaml     # vLLM + Llama 3.1 8B AWQ (GPU)
-│   │   ├── speaches-deployment.yaml # Speaches STT+TTS (CPU)
+│   │   ├── llm-deployment.yaml     # vLLM + Speaches sidecar (shared GPU)
 │   │   ├── orchestrator-deployment.yaml # Pipecat orchestrator (CPU)
 │   │   ├── services.yaml           # 3 ClusterIP services
 │   │   ├── configmap.yaml          # Endpoint URLs for service discovery
@@ -209,7 +208,7 @@ helm install livekit livekit/livekit-server -f helm/livekit/values.yaml
 
 ### 6. Deploy Voice Pipeline (Helm)
 
-The voice pipeline chart deploys LLM (vLLM), Speaches (STT+TTS), and the Pipecat Orchestrator as colocated pods on a single GPU node.
+The voice pipeline chart deploys the LLM (vLLM) and Speaches (STT+TTS) as sidecar containers sharing a single GPU, plus the Pipecat Orchestrator on a system node.
 
 The orchestrator connects to LiveKit via the node's private IP. LiveKit runs with `hostNetwork: true`, and in EKS Auto Mode the ClusterIP Service does not route traffic to hostNetwork pods across nodes. You must deploy LiveKit first (step 6) and then pass its private IP to the pipeline chart:
 
@@ -232,7 +231,7 @@ helm install voice-pipeline helm/voice-pipeline/ \
   --set speaches.env.HF_TOKEN=$HUGGINGFACE_TOKEN
 ```
 
-This provisions a Karpenter NodePool, schedules the LLM pod on a GPU node, and pulls Speaches + Orchestrator onto the same node via pod affinity.
+This provisions a Karpenter NodePool, schedules the LLM pod (with Speaches sidecar) on a GPU node. The orchestrator runs on a system node.
 
 > **Why the private IP instead of DNS?** LiveKit uses `hostNetwork: true` to expose WebRTC ports directly. In EKS Auto Mode, the ClusterIP Service created by the LiveKit Helm chart does not correctly route traffic to hostNetwork pods on other nodes. Using the node's private IP bypasses this limitation entirely. This means LiveKit must be deployed before the voice pipeline so its IP is known.
 
@@ -266,11 +265,12 @@ Wait for readiness (GPU node provisioning ~3-5 min, LLM model loading ~3-5 min):
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=llm --timeout=600s
 ```
 
-Verify all pipeline pods are colocated (LiveKit may be on a different node — that's fine):
+Verify the pipeline pod is running (LLM + Speaches share one pod; orchestrator is separate):
 
 ```bash
 kubectl get pods -o wide
-# voice-pipeline-* pods should show the same NODE
+# voice-pipeline-llm-* should show 2/2 containers READY on the GPU node
+# voice-pipeline-orchestrator-* runs on a system node
 # livekit pod may be on a different node — that's expected
 ```
 
