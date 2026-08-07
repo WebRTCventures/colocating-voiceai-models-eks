@@ -48,7 +48,7 @@ export default function Home() {
     if (!room) return false;
     let found = false;
     room.remoteParticipants.forEach((participant) => {
-      if (participant.identity === 'voice-agent') {
+      if (participant.identity.startsWith('agent-')) {
         found = true;
       }
     });

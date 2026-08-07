@@ -7,7 +7,6 @@ using LiveKit Agents framework with OpenAI-compatible endpoints.
 import json
 import logging
 import os
-import time
 
 from livekit.agents import (
     Agent,
@@ -88,32 +87,27 @@ async def entrypoint(ctx: JobContext):
         vad=ctx.proc.userdata["vad"],
     )
 
-    # Track per-stage latency and publish to room
-    session_start = None
+    # Publish per-stage metrics to the room for browser display
+    @session.on("metrics_collected")
+    def on_metrics(ev):
+        metrics = ev.metrics
+        from livekit.agents.metrics.base import STTMetrics, LLMMetrics, TTSMetrics
 
-    @session.on("agent_started_speaking")
-    def on_speaking():
-        nonlocal session_start
-        if session_start is not None:
-            elapsed = time.perf_counter() - session_start
-            logger.info(f"Total pipeline latency: {elapsed*1000:.0f}ms")
-            # Publish latency to room for browser display
-            try:
-                import asyncio
-                asyncio.create_task(_publish_latency(ctx, elapsed))
-            except Exception:
-                pass
-            session_start = None
+        data: dict = {"type": "latency"}
+        if isinstance(metrics, STTMetrics):
+            data["stt_ms"] = round(metrics.duration * 1000)
+        elif isinstance(metrics, LLMMetrics):
+            data["llm_ms"] = round((metrics.ttft or 0) * 1000)
+        elif isinstance(metrics, TTSMetrics):
+            data["tts_ms"] = round((metrics.ttfb or 0) * 1000)
+        else:
+            return
 
-    @session.on("user_stopped_speaking")
-    def on_user_stopped():
-        nonlocal session_start
-        session_start = time.perf_counter()
-        logger.info("VAD: user stopped speaking — sending to STT")
-
-    @session.on("user_started_speaking")
-    def on_user_started():
-        logger.info("VAD: user started speaking")
+        try:
+            import asyncio
+            asyncio.create_task(_publish_data(ctx, json.dumps(data)))
+        except Exception:
+            pass
 
     await session.start(
         agent=VoiceAssistant(),
@@ -123,22 +117,14 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
 
-async def _publish_latency(ctx: JobContext, total_seconds: float):
-    """Publish total pipeline latency to the room for browser display."""
+async def _publish_data(ctx: JobContext, message: str):
+    """Publish a data message to the room."""
     try:
-        message = json.dumps({
-            "type": "latency",
-            "vad_ms": 0,
-            "stt_ms": 0,
-            "llm_ms": 0,
-            "tts_ms": 0,
-            "total_ms": total_seconds * 1000,
-        })
         local = ctx.room.local_participant
         if local:
             await local.publish_data(message.encode(), reliable=True)
     except Exception as e:
-        logger.debug(f"Failed to publish latency: {e}")
+        logger.debug(f"Failed to publish data: {e}")
 
 
 if __name__ == "__main__":

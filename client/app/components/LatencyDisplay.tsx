@@ -12,7 +12,6 @@ function formatMs(value: number | null): string {
 }
 
 const stages: { key: keyof Omit<LatencyData, 'total'>; label: string }[] = [
-  { key: 'vad', label: 'VAD' },
   { key: 'stt', label: 'STT' },
   { key: 'llm', label: 'LLM' },
   { key: 'tts', label: 'TTS' },
