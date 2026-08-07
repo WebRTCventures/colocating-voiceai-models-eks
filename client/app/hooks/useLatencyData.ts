@@ -13,27 +13,23 @@ const INITIAL_LATENCY: LatencyData = {
 };
 
 /**
- * Parse an already-decoded value into LatencyData.
- * Exported as a pure function for independent property-based testing.
- *
- * Returns parsed LatencyData if the value is a valid latency message, null otherwise.
- * Validates: Requirements 4.1, 4.2, 4.3, 4.6
+ * Parse an already-decoded value into a partial LatencyData update.
+ * Accepts messages with any subset of latency fields.
+ * Returns parsed fields if the value is a valid latency message, null otherwise.
  */
-export function parseLatencyMessage(data: unknown): LatencyData | null {
+export function parseLatencyMessage(data: unknown): Partial<LatencyData> | null {
   if (typeof data !== 'object' || data === null) return null;
   const msg = data as Record<string, unknown>;
   if (msg.type !== 'latency') return null;
-  const fields = ['vad_ms', 'stt_ms', 'llm_ms', 'tts_ms', 'total_ms'];
-  for (const field of fields) {
-    if (typeof msg[field] !== 'number') return null;
-  }
-  return {
-    vad: Math.round(msg.vad_ms as number),
-    stt: Math.round(msg.stt_ms as number),
-    llm: Math.round(msg.llm_ms as number),
-    tts: Math.round(msg.tts_ms as number),
-    total: Math.round(msg.total_ms as number),
-  };
+
+  const result: Partial<LatencyData> = {};
+  if (typeof msg.vad_ms === 'number') result.vad = Math.round(msg.vad_ms);
+  if (typeof msg.stt_ms === 'number') result.stt = Math.round(msg.stt_ms);
+  if (typeof msg.llm_ms === 'number') result.llm = Math.round(msg.llm_ms);
+  if (typeof msg.tts_ms === 'number') result.tts = Math.round(msg.tts_ms);
+  if (typeof msg.total_ms === 'number') result.total = Math.round(msg.total_ms);
+
+  return Object.keys(result).length > 0 ? result : null;
 }
 
 /**
@@ -52,7 +48,15 @@ export function useLatencyData(room: Room | null): LatencyData {
       const parsed = JSON.parse(text);
       const result = parseLatencyMessage(parsed);
       if (result) {
-        setLatencyData(result);
+        setLatencyData(prev => {
+          const next = { ...prev, ...result };
+          // Compute total from individual stages
+          const stt = next.stt ?? 0;
+          const llm = next.llm ?? 0;
+          const tts = next.tts ?? 0;
+          next.total = stt + llm + tts;
+          return next;
+        });
       }
     } catch {
       // Silently discard unparseable payloads
