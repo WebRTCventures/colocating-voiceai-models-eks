@@ -163,6 +163,7 @@ export function useRoom(): UseRoomReturn {
       const audioTrack = micStream.getAudioTracks()[0];
       const lkTrack = new LocalAudioTrack(audioTrack);
       await newRoom.localParticipant.publishTrack(lkTrack, {
+        source: Track.Source.Microphone,
         dtx: true,
         red: true,
         audioPreset: { maxBitrate: 32000 },

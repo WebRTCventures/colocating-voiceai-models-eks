@@ -75,11 +75,15 @@ async def entrypoint(ctx: JobContext):
             base_url=LLM_BASE_URL,
             api_key="sk-placeholder",
         ),
+        # Speaches sends raw PCM in SSE streaming mode regardless of response_format.
+        # Using response_format="pcm" tells the SDK to expect raw PCM, matching what
+        # Speaches actually delivers.
         tts=openai.TTS(
             model=TTS_MODEL,
             voice="af_heart",
             base_url=TTS_BASE_URL,
-            api_key="sk-placeholder",
+            api_key="not-needed",
+            response_format="pcm",
         ),
         vad=ctx.proc.userdata["vad"],
     )
@@ -105,6 +109,11 @@ async def entrypoint(ctx: JobContext):
     def on_user_stopped():
         nonlocal session_start
         session_start = time.perf_counter()
+        logger.info("VAD: user stopped speaking — sending to STT")
+
+    @session.on("user_started_speaking")
+    def on_user_started():
+        logger.info("VAD: user started speaking")
 
     await session.start(
         agent=VoiceAssistant(),

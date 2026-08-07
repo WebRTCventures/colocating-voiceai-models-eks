@@ -120,6 +120,16 @@ resources:
     cpu: 500m
     memory: 256Mi
 
+# Schedule on the dedicated "voice-agents" nodepool (shared with orchestrator)
+nodeSelector:
+  workload-type: voice-agents
+
+tolerations:
+  - key: workload-type
+    operator: Equal
+    value: voice-agents
+    effect: NoSchedule
+
 # 5-hour graceful shutdown — allows active WebRTC sessions to complete
 terminationGracePeriodSeconds: 18000
 

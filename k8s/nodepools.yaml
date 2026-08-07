@@ -1,0 +1,41 @@
+# CPU NodePool for LiveKit + Orchestrator (colocated on a single node).
+# Apply before deploying Helm charts:
+#   kubectl apply -f k8s/nodepools.yaml
+#
+# Pinned to us-east-1a for low latency to GPU nodes.
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: voice-agents
+spec:
+  disruption:
+    budgets:
+      - nodes: "0"
+    consolidateAfter: Never
+    consolidationPolicy: WhenEmpty
+  limits:
+    cpu: "8"
+  template:
+    metadata:
+      labels:
+        workload-type: voice-agents
+    spec:
+      nodeClassRef:
+        group: eks.amazonaws.com
+        kind: NodeClass
+        name: default
+      requirements:
+        - key: "karpenter.sh/capacity-type"
+          operator: In
+          values: ["on-demand"]
+        - key: "kubernetes.io/arch"
+          operator: In
+          values: ["amd64"]
+        - key: "topology.kubernetes.io/zone"
+          operator: In
+          values: ["us-east-1a"]
+      taints:
+        - key: workload-type
+          value: voice-agents
+          effect: NoSchedule

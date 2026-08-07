@@ -18,6 +18,25 @@ spec:
         {{- include "voice-pipeline.pipelineLabels" . | nindent 8 }}
         app.kubernetes.io/component: orchestrator
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        workload-type: voice-agents
+      tolerations:
+        - key: workload-type
+          operator: Equal
+          value: voice-agents
+          effect: NoSchedule
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - livekit-server
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: orchestrator
           image: "{{ .Values.orchestrator.image.repository }}:{{ .Values.orchestrator.image.tag }}"
