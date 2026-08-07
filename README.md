@@ -40,8 +40,9 @@ EKS Auto Mode cluster with GPU support for running a voice AI pipeline (LiveKit 
 │   ├── Dockerfile                  # Multi-stage build (node:20-alpine, standalone)
 │   ├── .env.local.example          # Required env vars documentation
 │   └── package.json
-├── k8s/                    # Kubernetes manifests (reference only)
-│   └── gpu-nodepool.yaml   # (reference only — managed by Helm chart)
+├── k8s/                    # Kubernetes manifests
+│   ├── gpu-nodepool.yaml   # (reference only — managed by Helm chart)
+│   └── nodepools.yaml     # CPU NodePool for LiveKit + Orchestrator
 ├── flake.nix               # Nix dev environment
 └── .envrc                  # direnv activation
 ```
@@ -176,6 +177,12 @@ The agent registers as a LiveKit worker and is dispatched automatically when a p
 ### 5. Deploy LiveKit Server
 
 LiveKit is the WebRTC media server that relays audio between the browser client and the orchestrator. It runs with hostNetwork mode on a general-purpose CPU node — no ALB, domain, or TLS required.
+
+**Create the CPU NodePool** (LiveKit + Orchestrator share this node):
+
+```bash
+kubectl apply -f k8s/nodepools.yaml
+```
 
 **Generate credentials:**
 
@@ -324,7 +331,7 @@ docker run -p 3000:3000 \
 2. Click "Connect" — status should show "Connected", then "Waiting for agent..." briefly until the orchestrator joins
 3. Speak into your microphone — you should see the "You" audio visualizer respond
 4. The agent responds through your speakers — the "Agent" visualizer activates
-5. After each interaction, latency metrics (VAD, STT, LLM, TTS, Total) update in real-time
+5. After each interaction, latency metrics (STT, LLM, TTS, Total) update in real-time
 
 > **Network requirement:** Your browser must have direct UDP access to the EKS node IP on ports 50000-60000 (WebRTC media) and TCP 7880 (WebSocket signaling). If behind a corporate firewall or restrictive NAT, WebRTC will fail.
 
@@ -335,6 +342,7 @@ docker run -p 3000:3000 \
 ```bash
 helm uninstall livekit
 helm uninstall voice-pipeline
+kubectl delete -f k8s/nodepools.yaml
 cd terraform
 terraform destroy
 ```
