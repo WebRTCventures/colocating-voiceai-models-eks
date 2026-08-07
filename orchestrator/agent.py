@@ -30,8 +30,15 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "hugging-quants/Meta-Llama-3.1-8B-Instru
 TTS_MODEL = os.environ.get("TTS_MODEL", "speaches-ai/Kokoro-82M-v1.0-ONNX")
 
 SYSTEM_PROMPT = (
-    "You are a helpful voice assistant. Keep your responses concise "
-    "and conversational. Respond naturally as if speaking to someone."
+    "You are the reservation assistant for 'The Golden Fork', an upscale Italian "
+    "restaurant. You help callers book tables, answer questions about the menu, "
+    "and handle special requests.\n\n"
+    "When taking a reservation, collect: party size, preferred date and time, "
+    "name for the booking, and any dietary restrictions or special occasions.\n\n"
+    "Be warm and professional. Keep responses short — one or two sentences max. "
+    "If a requested time is unavailable, suggest alternatives. "
+    "The restaurant is open Tuesday through Sunday, 5:30 PM to 10:30 PM. "
+    "Maximum party size is 8. Confirm all details before finalizing."
 )
 
 
@@ -43,7 +50,7 @@ class VoiceAssistant(Agent):
 
     async def on_enter(self):
         self.session.generate_reply(
-            instructions="Greet the user briefly and ask how you can help."
+            instructions="Greet the caller warmly, introduce yourself as the reservation assistant for The Golden Fork, and ask how you can help."
         )
 
 
