@@ -1,20 +1,23 @@
-# Scheduling
-scheduling:
-  colocated: true
-  nodeSelector: {}
+# 3-Node Layout: all components in the same AZ/subnet for low latency
+# Node 1 (CPU): LiveKit + Orchestrator — colocated on a general-purpose node
+# Node 2 (GPU): LLM (vLLM) — dedicated g5.xlarge
+# Node 3 (GPU): Speaches STT+TTS — dedicated g5.xlarge
+#
+# All nodes pinned to us-east-1a for minimum inter-node latency.
 
-# Shared pipeline label (for identification/monitoring, NOT used as affinity selector)
+# Shared pipeline label (for identification/monitoring)
 pipeline:
   group: pipeline
 
-# GPU toleration applied to all pods in colocated mode
+# GPU toleration applied to GPU pods
 gpu:
   taint:
     key: nvidia.com/gpu
     value: "true"
     effect: NoSchedule
 
-# LLM configuration (own GPU node)
+# LLM configuration (dedicated GPU node — g5.xlarge has 1 GPU, so Karpenter
+# provisions a separate node automatically)
 llm:
   image:
     repository: public.ecr.aws/deep-learning-containers/vllm
@@ -42,10 +45,10 @@ llm:
     failureThreshold: 3
   port: 8000
 
-# Speaches STT+TTS configuration (own GPU node)
+# Speaches STT+TTS configuration (dedicated GPU node — g5.xlarge has 1 GPU,
+# so Karpenter provisions a separate node from LLM automatically)
 speaches:
   enabled: true
-  tolerateGpuTaint: true
   image:
     repository: ghcr.io/speaches-ai/speaches
     tag: "0.9.0-rc.3-cuda"
@@ -72,9 +75,8 @@ speaches:
     failureThreshold: 5
   port: 8000
 
-# Orchestrator configuration
+# Orchestrator configuration (shares CPU node with LiveKit — no GPU toleration)
 orchestrator:
-  tolerateGpuTaint: false
   image:
     repository: ""  # Set to your ECR URL: <account>.dkr.ecr.<region>.amazonaws.com/voiceai-eks/orchestrator
     tag: "latest"
@@ -93,7 +95,7 @@ orchestrator:
     apiKey: ""     # LiveKit API key
     apiSecret: ""  # LiveKit API secret
 
-# Karpenter NodePool
+# Karpenter NodePool — provisions 2 GPU nodes in the same AZ
 nodepool:
   enabled: true
   instanceTypes:
@@ -106,7 +108,7 @@ nodepool:
     kind: NodeClass
     name: default
   disruption:
-    consolidateAfter: 30m
+    consolidateAfter: Never
     consolidationPolicy: WhenEmpty
     budgets:
       - nodes: "0"

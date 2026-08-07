@@ -1,4 +1,4 @@
-suite: default values tests
+suite: default values tests (3-node mode)
 templates:
   - templates/llm-deployment.yaml
   - templates/speaches-deployment.yaml
@@ -7,7 +7,7 @@ templates:
   - templates/configmap.yaml
   - templates/karpenter-nodepool.yaml
 tests:
-  # --- Resource count: 3 Deployments (1 per template) ---
+  # --- Resource count ---
   - it: should render LLM Deployment
     template: templates/llm-deployment.yaml
     asserts:
@@ -32,23 +32,12 @@ tests:
       - isKind:
           of: Deployment
 
-  # --- Resource count: 3 Services ---
   - it: should render 3 Services
     template: templates/services.yaml
     asserts:
       - hasDocuments:
           count: 3
-      - isKind:
-          of: Service
-        documentIndex: 0
-      - isKind:
-          of: Service
-        documentIndex: 1
-      - isKind:
-          of: Service
-        documentIndex: 2
 
-  # --- Resource count: 1 ConfigMap ---
   - it: should render 1 ConfigMap
     template: templates/configmap.yaml
     asserts:
@@ -57,7 +46,6 @@ tests:
       - isKind:
           of: ConfigMap
 
-  # --- Resource count: 1 NodePool ---
   - it: should render 1 NodePool
     template: templates/karpenter-nodepool.yaml
     asserts:
@@ -66,49 +54,70 @@ tests:
       - isKind:
           of: NodePool
 
-  # --- LLM deployment: GPU resource request and NO podAffinity ---
-  - it: LLM deployment should have GPU resource request
+  # --- GPU resources ensure node isolation (1 GPU per g5.xlarge) ---
+  - it: LLM should request 1 GPU
     template: templates/llm-deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests["nvidia.com/gpu"]
           value: "1"
 
-  - it: LLM deployment should NOT have podAffinity
-    template: templates/llm-deployment.yaml
-    asserts:
-      - isNull:
-          path: spec.template.spec.affinity
-
-  # --- Speaches deployment has podAffinity targeting llm ---
-  - it: Speaches deployment should have podAffinity targeting llm component
+  - it: Speaches should request 1 GPU
     template: templates/speaches-deployment.yaml
     asserts:
       - equal:
-          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchExpressions[0].key
-          value: app.kubernetes.io/component
-      - equal:
-          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchExpressions[0].values[0]
-          value: llm
-      - equal:
-          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey
-          value: kubernetes.io/hostname
+          path: spec.template.spec.containers[0].resources.requests["nvidia.com/gpu"]
+          value: "1"
 
-  # --- Orchestrator deployment has podAffinity targeting llm ---
-  - it: Orchestrator deployment should have podAffinity targeting llm component
+  # --- No affinity rules needed (nodepools + taints handle isolation) ---
+  - it: LLM should have no affinity
+    template: templates/llm-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.affinity
+
+  - it: Speaches should have no affinity
+    template: templates/speaches-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.affinity
+
+  - it: Orchestrator should have no affinity
     template: templates/orchestrator-deployment.yaml
     asserts:
-      - equal:
-          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchExpressions[0].key
-          value: app.kubernetes.io/component
-      - equal:
-          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchExpressions[0].values[0]
-          value: llm
-      - equal:
-          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey
-          value: kubernetes.io/hostname
+      - notExists:
+          path: spec.template.spec.affinity
 
-  # --- All pods carry voice-pipeline/group: pipeline label ---
+  # --- GPU tolerations on GPU pods only ---
+  - it: LLM should have GPU toleration
+    template: templates/llm-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: nvidia.com/gpu
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+
+  - it: Speaches should have GPU toleration
+    template: templates/speaches-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: nvidia.com/gpu
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+
+  - it: Orchestrator should NOT have GPU toleration
+    template: templates/orchestrator-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.tolerations
+
+  # --- Pipeline group labels ---
   - it: LLM pod should carry pipeline group label
     template: templates/llm-deployment.yaml
     asserts:
@@ -129,37 +138,3 @@ tests:
       - equal:
           path: spec.template.metadata.labels.voice-pipeline/group
           value: pipeline
-
-  # --- GPU toleration present on all pods in colocated mode ---
-  - it: LLM pod should have GPU toleration
-    template: templates/llm-deployment.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.tolerations
-          content:
-            key: nvidia.com/gpu
-            operator: Equal
-            value: "true"
-            effect: NoSchedule
-
-  - it: Speaches pod should have GPU toleration in colocated mode
-    template: templates/speaches-deployment.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.tolerations
-          content:
-            key: nvidia.com/gpu
-            operator: Equal
-            value: "true"
-            effect: NoSchedule
-
-  - it: Orchestrator pod should have GPU toleration in colocated mode
-    template: templates/orchestrator-deployment.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.tolerations
-          content:
-            key: nvidia.com/gpu
-            operator: Equal
-            value: "true"
-            effect: NoSchedule

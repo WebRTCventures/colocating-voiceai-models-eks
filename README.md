@@ -1,6 +1,6 @@
 # Colocating Voice AI Models on EKS
 
-EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline (STT + LLM + TTS sharing a single A10G GPU, with LiveKit WebRTC transport) on a g5.2xlarge node.
+EKS Auto Mode cluster with GPU support for running a voice AI pipeline (LiveKit + Orchestrator + LLM + STT/TTS) across 3 nodes in the same AZ/subnet for low inter-node latency.
 
 ## Project Structure
 
@@ -14,13 +14,12 @@ EKS Auto Mode cluster with GPU support for running a colocated voice AI pipeline
 │   └── values.yaml                 # hostNetwork, credentials, colocation
 ├── helm/voice-pipeline/    # Helm chart for the voice AI pipeline
 │   ├── Chart.yaml
-│   ├── values.yaml                 # Default: colocated mode, g5.2xlarge
-│   ├── values-distributed.yaml     # Override: distributed mode (no affinity)
-│   ├── values-production.yaml      # Override: g5.12xlarge + NVIDIA NIM
+│   ├── values.yaml                 # Default values (3-node: shared CPU + 2 GPU, same AZ)
 │   ├── templates/
 │   │   ├── _helpers.tpl            # Shared labels, affinity, tolerations
-│   │   ├── llm-deployment.yaml     # vLLM + Speaches sidecar (shared GPU)
-│   │   ├── orchestrator-deployment.yaml # Pipecat orchestrator (CPU)
+│   │   ├── llm-deployment.yaml     # vLLM (dedicated GPU node)
+│   │   ├── speaches-deployment.yaml # Speaches STT+TTS (dedicated GPU node)
+│   │   ├── orchestrator-deployment.yaml # Pipecat orchestrator (CPU node)
 │   │   ├── services.yaml           # 3 ClusterIP services
 │   │   ├── configmap.yaml          # Endpoint URLs for service discovery
 │   │   └── karpenter-nodepool.yaml # GPU node provisioning
@@ -55,7 +54,7 @@ Use an IAM user or role with `AdministratorAccess` for the demo. The infrastruct
 
 ### Service Quota
 
-You need at least **8 vCPUs** of G-instance capacity (one g5.2xlarge = 8 vCPUs).
+You need at least **8 vCPUs** of G-instance capacity (two g5.xlarge = 4 vCPUs each).
 
 Check your quota:
 
@@ -89,8 +88,9 @@ The voice AI pipeline uses Llama 3.1. You'll need a [Hugging Face token](https:/
 
 | Resource | Cost |
 |----------|------|
-| g5.2xlarge | ~$1.21/hr |
+| 2× g5.xlarge (GPU nodes) | ~$2.14/hr |
 | EKS cluster | $0.10/hr |
+| 1× CPU node (general-purpose) | ~$0.05/hr |
 
 A full demo session (1-2 hours) costs under $5. Tear down when done.
 
@@ -125,6 +125,13 @@ aws eks describe-cluster \
   --query "cluster.status" --output text
 ```
 
+Get ECR from outputs:
+```bash
+# Get the ECR repository URL from Terraform
+ECR_REPO=$(terraform output -raw orchestrator_ecr_repository_url)
+```
+
+
 ### 3. Connect to the Cluster
 
 ```bash
@@ -137,10 +144,7 @@ kubectl cluster-info
 The orchestrator is a LiveKit Agents worker that connects STT → LLM → TTS using OpenAI-compatible endpoints (Speaches + vLLM). Build and push the container image to the ECR repository provisioned by Terraform:
 
 ```bash
-cd orchestrator
-
-# Get the ECR repository URL from Terraform
-ECR_REPO=$(cd ../terraform && terraform output -raw orchestrator_ecr_repository_url)
+cd ../orchestrator
 
 # Authenticate Docker with ECR
 aws ecr get-login-password --region $(cd ../terraform && terraform output -raw aws_region) \
@@ -171,7 +175,7 @@ The agent registers as a LiveKit worker and is dispatched automatically when a p
 
 ### 5. Deploy LiveKit Server
 
-LiveKit is the WebRTC media server that relays audio between the browser client and the orchestrator. It runs on the same GPU node via hostNetwork mode — no ALB, domain, or TLS required.
+LiveKit is the WebRTC media server that relays audio between the browser client and the orchestrator. It runs with hostNetwork mode on a general-purpose CPU node — no ALB, domain, or TLS required.
 
 **Generate credentials:**
 
@@ -201,19 +205,18 @@ helm install livekit livekit/livekit-server -f helm/livekit/values.yaml
 
 ### 6. Deploy Voice Pipeline (Helm)
 
-The voice pipeline chart deploys the LLM (vLLM) and Speaches (STT+TTS) as sidecar containers sharing a single GPU, plus the Pipecat Orchestrator on a system node.
+The voice pipeline chart deploys the LLM (vLLM) and Speaches (STT+TTS) on separate GPU nodes, plus the Pipecat Orchestrator on a CPU node.
 
-The orchestrator connects to LiveKit via the node's private IP. LiveKit runs with `hostNetwork: true`, and in EKS Auto Mode the ClusterIP Service does not route traffic to hostNetwork pods across nodes. You must deploy LiveKit first (step 6) and then pass its private IP to the pipeline chart:
+The orchestrator connects to LiveKit via the node's private IP. LiveKit runs with `hostNetwork: true`, and in EKS Auto Mode the ClusterIP Service does not route traffic to hostNetwork pods across nodes. You must deploy LiveKit first (step 5) and then pass its private IP to the pipeline chart:
 
 ```bash
+# wait for a the node to be up and have an ip
+
 # Get the LiveKit pod's node-internal IP
 LIVEKIT_IP=$(kubectl get pods -l app.kubernetes.io/name=livekit-server \
   -o jsonpath='{.items[0].status.hostIP}')
-
-ECR_REPO=$(cd terraform && terraform output -raw orchestrator_ecr_repository_url)
+echo "LIVEKIT_IP: $LIVEKIT_IP" # re-run the above command if no ip
 ```
-
-**Default (colocated mode):**
 
 ```bash
 helm install voice-pipeline helm/voice-pipeline/ \
@@ -224,33 +227,17 @@ helm install voice-pipeline helm/voice-pipeline/ \
   --set speaches.env.HF_TOKEN=$HUGGINGFACE_TOKEN
 ```
 
-This provisions a Karpenter NodePool, schedules the LLM pod (with Speaches sidecar) on a GPU node. The orchestrator runs on a system node.
+This provisions a Karpenter GPU NodePool and schedules each component on its own dedicated node:
+
+| Node | Component | Instance Type | GPU |
+|------|-----------|---------------|-----|
+| 1 | LiveKit + Orchestrator | general-purpose (EKS Auto) | No |
+| 2 | LLM (vLLM) | g5.xlarge (Karpenter) | 1x A10G |
+| 3 | Speaches (STT+TTS) | g5.xlarge (Karpenter) | 1x A10G |
+
+All nodes are pinned to a single AZ (`us-east-1a`) via Karpenter topology constraints and EKS Auto Mode subnet config, keeping inter-node latency under 0.1ms.
 
 > **Why the private IP instead of DNS?** LiveKit uses `hostNetwork: true` to expose WebRTC ports directly. In EKS Auto Mode, the ClusterIP Service created by the LiveKit Helm chart does not correctly route traffic to hostNetwork pods on other nodes. Using the node's private IP bypasses this limitation entirely. This means LiveKit must be deployed before the voice pipeline so its IP is known.
-
-**Distributed mode** (pods on separate nodes, for latency comparison):
-
-```bash
-helm install voice-pipeline helm/voice-pipeline/ \
-  -f helm/voice-pipeline/values-distributed.yaml \
-  --set orchestrator.image.repository=$ECR_REPO \
-  --set orchestrator.livekit.url="ws://${LIVEKIT_IP}:7880" \
-  --set orchestrator.livekit.apiKey="$LIVEKIT_API_KEY" \
-  --set orchestrator.livekit.apiSecret="$LIVEKIT_API_SECRET" \
-  --set speaches.env.HF_TOKEN=$HUGGINGFACE_TOKEN
-```
-
-**Production mode** (g5.12xlarge + NVIDIA NIM for STT/TTS):
-
-```bash
-helm install voice-pipeline helm/voice-pipeline/ \
-  -f helm/voice-pipeline/values-production.yaml \
-  --set orchestrator.image.repository=$ECR_REPO \
-  --set orchestrator.livekit.url="ws://${LIVEKIT_IP}:7880" \
-  --set orchestrator.livekit.apiKey="$LIVEKIT_API_KEY" \
-  --set orchestrator.livekit.apiSecret="$LIVEKIT_API_SECRET" \
-  --set speaches.env.HF_TOKEN=$HUGGINGFACE_TOKEN
-```
 
 Wait for readiness (GPU node provisioning ~3-5 min, LLM model loading ~3-5 min):
 
@@ -262,9 +249,10 @@ Verify the pipeline pod is running (LLM + Speaches share one pod; orchestrator i
 
 ```bash
 kubectl get pods -o wide
-# voice-pipeline-llm-* should show 2/2 containers READY on the GPU node
-# voice-pipeline-orchestrator-* runs on a system node
-# livekit pod may be on a different node — that's expected
+# voice-pipeline-llm-*          on a GPU node
+# voice-pipeline-speaches-*     on a separate GPU node
+# voice-pipeline-orchestrator-* on a CPU node (shared with LiveKit)
+# livekit-*                     on the same CPU node as orchestrator
 ```
 
 ### 7. Get the public IP for the browser client
@@ -301,7 +289,7 @@ cd client
 cp .env.local.example .env.local
 ```
 
-Edit `.env.local` with the LiveKit credentials from step 6 and the **public** IP from step 8:
+Edit `.env.local` with the LiveKit credentials from step 5 and the **public** IP from step 7:
 
 ```bash
 LIVEKIT_URL=ws://<NODE_IP>:7880
@@ -334,10 +322,9 @@ docker run -p 3000:3000 \
 
 1. Open http://localhost:3000 in Chrome or Firefox (120+)
 2. Click "Connect" — status should show "Connected", then "Waiting for agent..." briefly until the orchestrator joins
-3. The deployment badge should show "Colocated" or "Distributed"
-4. Speak into your microphone — you should see the "You" audio visualizer respond
-5. The agent responds through your speakers — the "Agent" visualizer activates
-6. After each interaction, latency metrics (VAD, STT, LLM, TTS, Total) update in real-time
+3. Speak into your microphone — you should see the "You" audio visualizer respond
+4. The agent responds through your speakers — the "Agent" visualizer activates
+5. After each interaction, latency metrics (VAD, STT, LLM, TTS, Total) update in real-time
 
 > **Network requirement:** Your browser must have direct UDP access to the EKS node IP on ports 50000-60000 (WebRTC media) and TCP 7880 (WebSocket signaling). If behind a corporate firewall or restrictive NAT, WebRTC will fail.
 
