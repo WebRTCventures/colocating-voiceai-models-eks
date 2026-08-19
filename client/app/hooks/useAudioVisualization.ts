@@ -14,15 +14,15 @@ const VOICE_BINS = 32;
 const CANVAS_WIDTH = 300;
 const CANVAS_HEIGHT = 100;
 
-/** Background color for the canvas */
-const BG_COLOR = '#0a0a0a';
+/** Background color for the canvas — uses a very dark transparent shade */
+const BG_COLOR = 'rgba(26, 20, 16, 0.6)';
 
-/** Gradient colors: green (low amplitude) → cyan (high amplitude) */
-const COLOR_LOW = { r: 34, g: 197, b: 94 }; // #22c55e
-const COLOR_HIGH = { r: 6, g: 182, b: 212 }; // #06b6d4
+/** Gradient colors: warm gold (low amplitude) → bright gold (high amplitude) */
+const COLOR_LOW = { r: 160, g: 125, b: 63 }; // #a07d3f
+const COLOR_HIGH = { r: 212, g: 165, b: 89 }; // #d4a559
 
 /**
- * Interpolate between the green and cyan colors based on normalized amplitude.
+ * Interpolate between the warm and bright gold colors based on normalized amplitude.
  */
 function getBarColor(normalized: number): string {
   const r = Math.round(COLOR_LOW.r + (COLOR_HIGH.r - COLOR_LOW.r) * normalized);

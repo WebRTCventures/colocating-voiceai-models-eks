@@ -5,11 +5,12 @@ import { RemoteTrack, RemoteAudioTrack } from 'livekit-client';
 import { useRoom } from './hooks/useRoom';
 import { useLatencyData } from './hooks/useLatencyData';
 import { useDeploymentMode } from './hooks/useDeploymentMode';
-import ConnectionControls from './components/ConnectionControls';
-import { AudioVisualization } from './components/AudioVisualization';
-import LatencyDisplay from './components/LatencyDisplay';
-import DeploymentBadge from './components/DeploymentBadge';
-import StatusBar from './components/StatusBar';
+import { useTranscript } from './hooks/useTranscript';
+import AgentOrb from './components/AgentOrb';
+import CallControls from './components/CallControls';
+import UserMicIndicator from './components/UserMicIndicator';
+import MetricsPanel from './components/MetricsPanel';
+import TranscriptPanel from './components/TranscriptPanel';
 
 export default function Home() {
   const {
@@ -26,6 +27,7 @@ export default function Home() {
 
   const latencyData = useLatencyData(room);
   const mode = useDeploymentMode(room);
+  const transcript = useTranscript(room);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -55,20 +57,29 @@ export default function Home() {
     return found;
   }, [room, connectionState, remoteTrack]);
 
+  const isConnected = connectionState === 'connected';
+
   return (
-    <main className="flex flex-1 flex-col items-center gap-6 p-8">
-      {/* Header */}
-      <header className="flex flex-col items-center gap-1">
-        <h1 className="text-3xl font-semibold tracking-tight text-white">
-          Voice AI Latency Demo
+    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 sm:p-8 min-h-full">
+      {/* Restaurant branding header */}
+      <header className="flex flex-col items-center gap-2 text-center">
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[var(--accent-gold)]">
+          The Golden Fork
         </h1>
-        <p className="text-sm text-zinc-400">
-          Real-time voice AI latency demonstration — colocated vs distributed inference on EKS
+        <p className="text-sm text-[var(--foreground)]/60 max-w-sm">
+          AI Reservation Assistant — speak to book a table, ask about the menu, or make special requests
         </p>
       </header>
 
-      {/* Connection Controls */}
-      <ConnectionControls
+      {/* Agent orb — the central visual */}
+      <AgentOrb
+        remoteTrack={remoteTrack as RemoteAudioTrack | null}
+        agentPresent={agentPresent}
+        isConnected={isConnected}
+      />
+
+      {/* Call controls */}
+      <CallControls
         state={connectionState}
         isMuted={isMuted}
         onConnect={connect}
@@ -76,24 +87,32 @@ export default function Home() {
         onToggleMute={toggleMute}
       />
 
-      {/* Audio Visualization */}
-      <AudioVisualization
-        localTrack={localTrack}
-        remoteTrack={remoteTrack as RemoteAudioTrack | null}
-      />
+      {/* User mic indicator */}
+      <UserMicIndicator localTrack={localTrack} isMuted={isMuted} />
 
-      {/* Deployment Badge + Latency Display */}
-      <div className="flex flex-col items-center gap-4">
-        <DeploymentBadge mode={mode} />
-        <LatencyDisplay latencyData={latencyData} />
-      </div>
+      {/* Error display */}
+      {error && (
+        <div className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-2 text-sm text-red-300" role="alert">
+          {error}
+        </div>
+      )}
 
-      {/* Status Bar (at bottom) */}
-      <div className="mt-auto w-full rounded-b-lg">
-        <StatusBar
-          state={connectionState}
-          error={error}
-          agentPresent={agentPresent}
+      {/* Info text when disconnected */}
+      {connectionState === 'disconnected' && !error && (
+        <p className="text-xs text-[var(--foreground)]/40 text-center max-w-xs">
+          Tap the phone button to call. Open Tue–Sun, 5:30–10:30 PM.
+        </p>
+      )}
+
+      {/* Transcript panel */}
+      <TranscriptPanel entries={transcript} isConnected={isConnected} />
+
+      {/* Metrics panel — technical overlay for the demo */}
+      <div className="mt-auto w-full">
+        <MetricsPanel
+          latencyData={latencyData}
+          mode={mode}
+          isConnected={isConnected}
         />
       </div>
 

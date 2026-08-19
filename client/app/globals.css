@@ -1,13 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #1a1410;
+  --foreground: #f5f0eb;
+  --accent-gold: #d4a559;
+  --accent-gold-dim: #a07d3f;
+  --surface: #231c14;
+  --surface-raised: #2d241a;
+  --border: #3d3226;
+  --border-light: #4d4236;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-gold-dim: var(--accent-gold-dim);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-light: var(--border-light);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -34,4 +46,32 @@ body {
     height: 100vh;
     overflow: hidden;
   }
+}
+
+/* Pulsing glow animation for the agent orb when speaking */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(212, 165, 89, 0.3), 0 0 40px rgba(212, 165, 89, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(212, 165, 89, 0.5), 0 0 60px rgba(212, 165, 89, 0.2);
+  }
+}
+
+.agent-speaking {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Subtle shimmer for idle state */
+@keyframes shimmer {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.agent-idle {
+  animation: shimmer 3s ease-in-out infinite;
 }
