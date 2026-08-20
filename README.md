@@ -19,7 +19,7 @@ EKS Auto Mode cluster with GPU support for running a voice AI pipeline (LiveKit 
 │   │   ├── _helpers.tpl            # Shared labels, affinity, tolerations
 │   │   ├── llm-deployment.yaml     # vLLM (dedicated GPU node)
 │   │   ├── speaches-deployment.yaml # Speaches STT+TTS (dedicated GPU node)
-│   │   ├── orchestrator-deployment.yaml # Pipecat orchestrator (CPU node)
+│   │   ├── orchestrator-deployment.yaml # LiveKit Agents orchestrator (CPU node)
 │   │   ├── services.yaml           # 3 ClusterIP services
 │   │   ├── configmap.yaml          # Endpoint URLs for service discovery
 │   │   └── karpenter-nodepool.yaml # GPU node provisioning
@@ -41,7 +41,6 @@ EKS Auto Mode cluster with GPU support for running a voice AI pipeline (LiveKit 
 │   ├── .env.local.example          # Required env vars documentation
 │   └── package.json
 ├── k8s/                    # Kubernetes manifests
-│   ├── gpu-nodepool.yaml   # (reference only — managed by Helm chart)
 │   └── nodepools.yaml     # CPU NodePool for LiveKit + Orchestrator
 ├── flake.nix               # Nix dev environment
 └── .envrc                  # direnv activation
@@ -212,7 +211,7 @@ helm install livekit livekit/livekit-server -f helm/livekit/values.yaml
 
 ### 6. Deploy Voice Pipeline (Helm)
 
-The voice pipeline chart deploys the LLM (vLLM) and Speaches (STT+TTS) on separate GPU nodes, plus the Pipecat Orchestrator on a CPU node.
+The voice pipeline chart deploys the LLM (vLLM) and Speaches (STT+TTS) on separate GPU nodes, plus the LiveKit Agents orchestrator on a CPU node.
 
 The orchestrator connects to LiveKit via the node's private IP. LiveKit runs with `hostNetwork: true`, and in EKS Auto Mode the ClusterIP Service does not route traffic to hostNetwork pods across nodes. You must deploy LiveKit first (step 5) and then pass its private IP to the pipeline chart:
 

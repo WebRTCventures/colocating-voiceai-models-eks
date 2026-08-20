@@ -62,7 +62,7 @@ livekit:
   # share the exact same key/secret pair for token authentication to work.
   # ---------------------------------------------------------------------------
   keys:
-    mykey: mysecret
+    CHANGEME-api-key: CHANGEME-generate-with-openssl-rand-base64-32
 
 # =============================================================================
 # Host Network Configuration

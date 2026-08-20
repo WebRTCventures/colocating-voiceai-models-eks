@@ -5,6 +5,8 @@ metadata:
   labels:
     {{- include "voice-pipeline.labels" . | nindent 4 }}
 data:
+  # NOTE: In production, LIVEKIT_API_KEY and LIVEKIT_API_SECRET should be stored
+  # in a Kubernetes Secret, not a ConfigMap. Using a ConfigMap here for demo simplicity.
   STT_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}/v1"
   TTS_BASE_URL: "http://voice-pipeline-speaches.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.speaches.port }}/v1"
   LLM_BASE_URL: "http://voice-pipeline-llm.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.llm.port }}/v1"
